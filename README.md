@@ -12,7 +12,11 @@ If you've ever downloaded a Makerworld project and discovered it's locked to a
 Bambu printer, this is the tool for you. Drop the `.3mf` in, get a U1-ready
 `.3mf` out. No manual JSON editing, no profile rebuilding.
 
-## Quick start
+## Hosted Version
+
+**<https://u1convert.com>**
+
+## Quick start 
 
 ```bash
 git clone https://github.com/thadius83/bambu-to-snapmaker-u1.git
@@ -202,7 +206,7 @@ tmp/                Per-request working dirs, auto-cleaned
 Grab any Bambu Studio `.3mf` from [Makerworld](https://makerworld.com/) or
 your own slicer history. Painted multi-colour models work — the converter
 preserves Bambu's colour array order and inserts pause stops for
->4-colour prints.
+4+ colour prints when layer based. If using 5 or more colours with a painted model you will need to get creative with manual layer swaps
 
 ## Known limitations
 
@@ -211,6 +215,10 @@ preserves Bambu's colour array order and inserts pause stops for
   fully tested).
 - No conversion history or re-download after the cleanup window.
 - No in-app slicing — output must be re-sliced in Snapmaker Orca.
+- No support for colour mixing / full spectrum at this stage **planned**
+- As the Snapmaker Orca Slicer matures, the code will need to change to adapt.
+- Prints that are larger than the U1 build plate will convert, but obviously will need additional processing
+- Snapmaker Orca has several bugs and issues relating to the prime tower, a quick fix is to enable/disable/move the object/tower around and reslice
 
 ## Support the project
 
@@ -223,7 +231,7 @@ Open an issue on [GitHub](https://github.com/thadius83/bambu-to-snapmaker-u1/iss
 ## Credits
 
 - U1 reference profiles are derived from Snapmaker Orca's bundled defaults.
-- Thanks to the Snapmaker community for tuning guidance and bug reports.
+- Thanks to the Snapmaker facebook community for tuning guidance and bug reports.
 
 ## License
 
