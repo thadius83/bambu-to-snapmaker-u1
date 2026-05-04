@@ -1,0 +1,23 @@
+name: Bambu PLA Matte tuning
+description: >
+  Reduced speeds for Bambu PLA Matte. Matte filaments use higher pigment loads
+  and typically require slower outer-wall and top-surface speeds to avoid
+  surface haziness and maintain the matte texture. Overrides the generic PLA
+  rule for any filament whose settings ID contains "Matte".
+match:
+  filament_settings_id_contains: Matte
+  filament_vendor: Bambu Lab
+  filament_type: PLA
+overrides:
+  outer_wall_speed: 100
+  inner_wall_speed: 200
+  sparse_infill_speed: 200
+  internal_solid_infill_speed: 200
+  top_surface_speed: 80
+  gap_infill_speed: 80
+  default_acceleration: 4000
+  outer_wall_acceleration: 2000
+  inner_wall_acceleration: 4000
+  initial_layer_acceleration: 500
+priority: 10
+enabled: true

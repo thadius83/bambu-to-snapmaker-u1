@@ -1,0 +1,27 @@
+name: Bambu PETG HF tuning
+description: >
+  Moderate speeds for Bambu's high-flow PETG. Slower outer walls than PLA
+  to reduce stringing, but can run infill fast because the material flows
+  well. Based on Bambu's published PETG HF guidance — tune further if you
+  see stringing or poor layer adhesion.
+match:
+  filament_settings_id_contains: PETG HF
+  filament_vendor: Bambu Lab
+  filament_type: PETG
+overrides:
+  outer_wall_speed: 100
+  inner_wall_speed: 200
+  sparse_infill_speed: 250
+  internal_solid_infill_speed: 200
+  top_surface_speed: 100
+  gap_infill_speed: 100
+  default_acceleration: 4000
+  outer_wall_acceleration: 3000
+  inner_wall_acceleration: 4000
+  initial_layer_acceleration: 500
+  nozzle_temperature_initial_layer: ['255', '255', '255', '255']
+  nozzle_temperature: ['255', '255', '255', '255']
+  hot_plate_temp: 70
+  hot_plate_temp_initial_layer: 70
+priority: 10
+enabled: true

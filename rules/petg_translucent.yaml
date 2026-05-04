@@ -1,0 +1,24 @@
+name: Bambu PETG Translucent tuning
+description: >
+  Conservative speeds for translucent PETG to maintain optical clarity —
+  faster prints reduce translucency by introducing micro-voids. Matches
+  Bambu's "slow and low" guidance for this material.
+match:
+  filament_settings_id_contains: PETG Translucent
+  filament_vendor: Bambu Lab
+  filament_type: PETG
+overrides:
+  outer_wall_speed: 80
+  inner_wall_speed: 150
+  sparse_infill_speed: 180
+  internal_solid_infill_speed: 150
+  top_surface_speed: 70
+  gap_infill_speed: 80
+  default_acceleration: 3000
+  outer_wall_acceleration: 2000
+  inner_wall_acceleration: 3000
+  initial_layer_acceleration: 500
+  nozzle_temperature_initial_layer: ['260', '260', '260', '260']
+  nozzle_temperature: ['260', '260', '260', '260']
+priority: 11
+enabled: true

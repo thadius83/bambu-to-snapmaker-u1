@@ -1,0 +1,330 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="color-scheme" content="dark light" />
+  <title>Privacy Policy | U1 Converter</title>
+  <meta name="description" content="Privacy policy for U1 Converter: how your files and data are handled." />
+  <meta name="robots" content="index, follow" />
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
+  <link rel="shortcut icon" href="/favicon.ico" />
+  <style>
+    :root {
+      --bg: #0a0a0f;
+      --bg-elev: #111118;
+      --bg-raised: #15151d;
+      --border: #232330;
+      --text: #e8e8f0;
+      --text-muted: #8888a0;
+      --text-subtle: #5a5a70;
+      --accent: #818cf8;
+      --accent-hover: #a5b0ff;
+      --radius: 8px;
+      --font-sans: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+      color-scheme: dark;
+    }
+    :root[data-theme="light"] {
+      --bg: #fafafa;
+      --bg-elev: #ffffff;
+      --bg-raised: #f4f4f8;
+      --border: #e4e4ec;
+      --text: #0a0a0f;
+      --text-muted: #5a5a70;
+      --text-subtle: #90909e;
+      --accent: #4f46e5;
+      --accent-hover: #3730c4;
+      color-scheme: light;
+    }
+    *, *::before, *::after { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font-sans);
+      font-size: 14px;
+      line-height: 1.6;
+    }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { color: var(--accent-hover); text-decoration: underline; }
+
+    header {
+      border-bottom: 1px solid var(--border);
+      padding: 0 24px;
+      height: 52px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+    .wordmark {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--text);
+      text-decoration: none;
+      letter-spacing: -0.01em;
+    }
+    .wordmark:hover { color: var(--text); text-decoration: none; }
+    .back {
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+
+    main {
+      max-width: 680px;
+      margin: 0 auto;
+      padding: 40px 24px 80px;
+    }
+    h1 {
+      font-size: 20px;
+      font-weight: 700;
+      margin: 0 0 6px;
+      letter-spacing: -0.02em;
+    }
+    .meta {
+      font-size: 12px;
+      color: var(--text-subtle);
+      margin: 0 0 36px;
+    }
+    h2 {
+      font-size: 14px;
+      font-weight: 600;
+      margin: 32px 0 8px;
+      color: var(--text);
+    }
+    p { margin: 0 0 12px; font-size: 13.5px; color: var(--text-muted); }
+    p:last-child { margin-bottom: 0; }
+    ul { margin: 0 0 12px; padding-left: 20px; font-size: 13.5px; color: var(--text-muted); }
+    li { margin-bottom: 4px; }
+    code {
+      font-family: "JetBrains Mono", "SF Mono", ui-monospace, monospace;
+      font-size: 12px;
+      background: var(--bg-raised);
+      padding: 1px 5px;
+      border-radius: 3px;
+      color: var(--text);
+    }
+
+    .card {
+      background: var(--bg-elev);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px;
+      margin-top: 24px;
+    }
+    .card h2 { margin-top: 0; }
+
+    footer {
+      border-top: 1px solid var(--border);
+      padding: 20px 24px;
+      font-size: 12px;
+      color: var(--text-subtle);
+      text-align: center;
+    }
+
+    /* Contact modal */
+    .link-btn {
+      background: none;
+      border: none;
+      padding: 0;
+      font: inherit;
+      font-size: 13.5px;
+      color: var(--accent);
+      cursor: pointer;
+      text-decoration: none;
+    }
+    .link-btn:hover { color: var(--accent-hover); text-decoration: underline; }
+
+    .modal-backdrop {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.6);
+      backdrop-filter: blur(2px);
+      z-index: 100;
+      align-items: center;
+      justify-content: center;
+    }
+    .modal-backdrop.open { display: flex; }
+    .modal {
+      background: var(--bg-elev);
+      border: 1px solid var(--border-strong, var(--border));
+      border-radius: var(--radius);
+      padding: 24px;
+      width: min(440px, calc(100vw - 32px));
+    }
+    .modal h3 { margin: 0 0 16px; font-size: 14px; font-weight: 600; }
+    .modal label { display: block; font-size: 12px; color: var(--text-muted); margin-bottom: 4px; }
+    .modal textarea, .modal input[type=email] {
+      width: 100%;
+      background: var(--bg-raised);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      color: var(--text);
+      font-family: var(--font-sans);
+      font-size: 13px;
+      padding: 8px 10px;
+      box-sizing: border-box;
+      outline: none;
+      resize: vertical;
+    }
+    .modal textarea:focus, .modal input[type=email]:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 20%, transparent);
+    }
+    .modal textarea { min-height: 100px; margin-bottom: 12px; }
+    .modal input[type=email] { margin-bottom: 16px; }
+    .modal-actions { display: flex; gap: 8px; justify-content: flex-end; }
+    .btn {
+      font-family: var(--font-sans);
+      font-size: 13px;
+      font-weight: 500;
+      padding: 7px 16px;
+      border-radius: var(--radius);
+      border: 1px solid transparent;
+      cursor: pointer;
+    }
+    .btn-primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+    .btn-primary:hover { opacity: 0.9; }
+    .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-ghost { background: transparent; color: var(--text-muted); border-color: var(--border); }
+    .btn-ghost:hover { color: var(--text); border-color: var(--border-strong, var(--border)); }
+    .modal-success { text-align: center; padding: 16px 0; font-size: 13.5px; color: var(--text-muted); }
+    .modal-error { font-size: 12px; color: #f87171; margin-bottom: 12px; }
+  </style>
+</head>
+<body>
+  <header>
+    <a class="wordmark" href="/">U1 Converter</a>
+    <span class="back">· <a href="/">← Back to converter</a></span>
+  </header>
+
+  <main>
+    <h1>Privacy Policy</h1>
+    <p class="meta">Last updated: May 2026</p>
+
+    <div class="card">
+      <h2>What this tool does</h2>
+      <p>
+        U1 Converter converts Bambu Studio <code>.3mf</code> project files to
+        Snapmaker U1 format. It is a free, no-account tool. We do not sell, share,
+        or monetise any data.
+      </p>
+    </div>
+
+    <div class="card">
+      <h2>Uploaded files</h2>
+      <p>
+        Files you upload are processed automatically. No human reviews your files.
+        Your file is held in temporary storage only for as long as the conversion
+        takes, plus a short window (around five minutes) to allow download.
+        After that it is permanently deleted from the server.
+      </p>
+      <p>
+        Failed conversions are not retained. The workdir is deleted immediately on
+        any error.
+      </p>
+      <p>
+        We do not copy, analyse, index, or retain the content of your files beyond
+        what is needed to perform the conversion.
+      </p>
+    </div>
+
+    <!--BEGIN_GA_SECTION-->
+    <div class="card">
+      <h2>Analytics</h2>
+      <p>
+        We use Google Analytics (GA4) to understand how the site is used: page
+        views, feature usage, and general traffic patterns. Google Analytics
+        collects your approximate location (derived from IP address), browser and
+        device type, and session behaviour. Your IP address is not stored by us.
+      </p>
+      <p>
+        You can opt out of Google Analytics tracking using the
+        <a href="https://tools.google.com/dlpage/gaoptout" target="_blank" rel="noopener">Google Analytics Opt-out Browser Add-on</a>
+        or a browser extension such as uBlock Origin.
+      </p>
+    </div>
+    <!--END_GA_SECTION-->
+
+    <div class="card">
+      <h2>Cookies &amp; local storage</h2>
+      <!--BEGIN_GA_SECTION-->
+      <p>
+        Google Analytics sets cookies to distinguish sessions and users.
+      </p>
+      <!--END_GA_SECTION-->
+      <p>
+        The converter itself uses browser <code>localStorage</code> only to remember
+        your last-selected settings (quality profile, options). No personal
+        information is stored in <code>localStorage</code>.
+      </p>
+    </div>
+
+    <div class="card">
+      <h2>Server logs</h2>
+      <p>
+        Our server records standard access logs (request path, HTTP status,
+        response size, timestamp). These are used for monitoring and
+        troubleshooting. Logs are retained for a short period and then deleted.
+        IP addresses appear in logs transiently but are not linked to individual
+        uploads or user profiles.
+      </p>
+      <!--BEGIN_CF_SECTION-->
+      <p>
+        Requests are proxied through Cloudflare. Cloudflare may process your IP
+        address and request metadata in accordance with their
+        <a href="https://www.cloudflare.com/privacypolicy/" target="_blank" rel="noopener">privacy policy</a>.
+      </p>
+      <!--END_CF_SECTION-->
+    </div>
+
+    <div class="card">
+      <h2>Copyright &amp; file content</h2>
+      <p>
+        By uploading a file you confirm that you have the right to convert it.
+        U1 Converter is a format conversion tool only. We receive no licence to
+        the content of your file, and we make no claim over any models, designs,
+        or intellectual property contained within it.
+      </p>
+      <p>
+        We are not responsible for the content of files uploaded by users.
+      </p>
+    </div>
+
+    <div class="card">
+      <h2>Contact</h2>
+      <p>
+        For any privacy-related questions, concerns, or intellectual property
+        enquiries, <button type="button" class="link-btn" id="contact-link">send us a message</button>.
+      </p>
+    </div>
+  </main>
+
+  <div class="modal-backdrop" id="contact-modal">
+    <div class="modal">
+      <div id="modal-form-wrap">
+        <h3>Contact us</h3>
+        <div class="modal-error" id="modal-error" style="display:none"></div>
+        <label for="contact-message">Message</label>
+        <textarea id="contact-message" placeholder="Your question or concern..." rows="4"></textarea>
+        <label for="contact-email">Your email <span style="color:var(--text-subtle)">(optional, for reply only)</span></label>
+        <input type="email" id="contact-email" placeholder="you@example.com" />
+        <div class="modal-actions">
+          <button type="button" class="btn btn-ghost" id="modal-cancel">Cancel</button>
+          <button type="button" class="btn btn-primary" id="modal-submit">Send</button>
+        </div>
+      </div>
+      <div class="modal-success" id="modal-success" style="display:none">
+        Message sent. Thanks for reaching out.
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    &copy; U1 Converter &nbsp;·&nbsp; <a href="/">Back to converter</a>
+  </footer>
+
+  <script src="/privacy.js"></script>
+</body>
+</html>
