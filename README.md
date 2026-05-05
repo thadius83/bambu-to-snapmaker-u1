@@ -25,7 +25,7 @@ cp .env.example .env       # safe defaults; no editing needed for first run
 docker compose up --build
 ```
 
-Open **<http://localhost:8083>** in your browser. That's it.
+Open **<http://localhost:8084>** in your browser. That's it.
 
 No accounts, no database, no external dependencies beyond Docker.
 

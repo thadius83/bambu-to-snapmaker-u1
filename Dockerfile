@@ -16,7 +16,7 @@ COPY frontend/ ./
 RUN npm run build
 
 # ---- Stage 2: Python runtime -----------------------------------------------
-FROM python:3.14-slim AS runtime
+FROM python:3.12-slim AS runtime
 
 # Minimal system deps for zipfile / pillow (thumbnails) if ever needed.
 RUN apt-get update && apt-get install -y --no-install-recommends \
