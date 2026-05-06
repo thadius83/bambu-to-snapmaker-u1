@@ -8,11 +8,28 @@ third-party origin means adding it here and updating .env.example.
 """
 from __future__ import annotations
 
+import base64
+import hashlib
+import json
 import os
 import re
 
 GA_MEASUREMENT_ID: str = os.environ.get("GA_MEASUREMENT_ID", "").strip()
 CF_BEACON_TOKEN: str = os.environ.get("CF_BEACON_TOKEN", "").strip()
+
+
+def _google_tag_bootstrap_script(measurement_id: str) -> str:
+    return "\n".join([
+        "window.dataLayer=window.dataLayer||[];",
+        "function gtag(){dataLayer.push(arguments);}",
+        "gtag('js',new Date());",
+        f"gtag('config',{json.dumps(measurement_id)});",
+    ])
+
+
+def _script_sha256(script: str) -> str:
+    digest = hashlib.sha256(script.encode("utf-8")).digest()
+    return "'sha256-" + base64.b64encode(digest).decode("ascii") + "'"
 
 
 def _build_csp() -> str:
@@ -22,6 +39,7 @@ def _build_csp() -> str:
 
     if GA_MEASUREMENT_ID:
         script_src.append("https://*.googletagmanager.com")
+        script_src.append(_script_sha256(_google_tag_bootstrap_script(GA_MEASUREMENT_ID)))
         img_src += ["https://*.google-analytics.com", "https://*.googletagmanager.com"]
         connect_src += [
             "https://*.google-analytics.com",
