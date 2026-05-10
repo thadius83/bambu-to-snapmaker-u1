@@ -54,6 +54,7 @@ from profile_loader import (
     ProfileNotFoundError,
     list_profiles,
     read_project_settings,
+    read_source_settings,
     resolve_profile,
     suggest_profile,
 )
@@ -441,7 +442,7 @@ async def api_suggest_profile(file: UploadFile = File(...)) -> dict[str, Any]:
     _save_upload(file, src)
     try:
         try:
-            cfg = read_project_settings(src)
+            cfg, _detected_slicer = read_source_settings(src)
         except ProfileLoadError as err:
             telemetry.upload_errors_counter.add(1, {"reason": "unrecognised_file"})
             _retain_failed_workdir(
@@ -505,14 +506,14 @@ async def api_suggest_profile(file: UploadFile = File(...)) -> dict[str, Any]:
         _is_oversized = (max(_axs) - min(_axs)) > 270.0 or (max(_ays) - min(_ays)) > 270.0
         _is_colour_mixed = any(v == "1" for v in cfg.get("filament_is_mixed") or [])
 
-        _NON_BAMBU: dict[str, str] = {
-            "Metadata/creality.config": "Creality",
-            "Metadata/prusa_slicer.ini": "PrusaSlicer",
-            "Metadata/Cura_Profile.xml": "Cura",
-        }
-        _source_slicer = next(
-            (name for sig, name in _NON_BAMBU.items() if sig in _names), None
-        )
+        if already_converted:
+            _source_slicer = None
+        elif _detected_slicer is not None:
+            _source_slicer = _detected_slicer
+        elif source_printer.lower().startswith("bambu lab"):
+            _source_slicer = None
+        else:
+            _source_slicer = source_printer or "Unknown slicer"
 
         logger.info(
             "SUGGEST %s  lh=%s  pid=%r  printer=%r  already_converted=%s  filaments=%d  painted=%s  → %s",

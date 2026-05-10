@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Experimental support for compatible non-Bambu `.3mf` sources:
+  Orca-format exports from Flashforge, Anycubic, Creality, and similar slicers;
+  PrusaSlicer projects; Cura projects; and bare-geometry `.3mf` files.
+- PrusaSlicer MMU face-paint preservation by translating Prusa
+  `slic3rpe:mmu_segmentation` mesh attributes into Snapmaker Orca-compatible
+  paint data.
+- Clear upload rejection for sliced `.gcode.3mf` packages that contain plate
+  G-code but no editable model geometry.
+
+### Changed
+
+- Bare-geometry `.3mf` uploads now fall back to the bundled `0.20 Standard`
+  U1 profile when no layer-height metadata exists.
+- Help text now labels non-Bambu source support as experimental and documents
+  unsupported sliced-only `.gcode.3mf` files.
+
+### Fixed
+
+- Prevented geometry-empty output files when users upload sliced G-code 3MFs
+  instead of original project files.
+- Improved upload analysis errors so specific backend validation messages are
+  shown in the UI.
+
 ## [0.1.0] - 2026-05-05
 
 ### Added

@@ -5,6 +5,11 @@ and so the 500/1000-line cap on main.py has headroom.
 
 The CSP is composed once at import time from env vars — adding a new
 third-party origin means adding it here and updating .env.example.
+
+Known console warning on CF-proxied sites: Cloudflare's JavaScript Detections
+injects an inline script keyed to the CF-Ray ID. The hash rotates per-request
+so it cannot be whitelisted. Accepted — no user impact, network-layer CF
+protection (DDoS/WAF) is unaffected.
 """
 from __future__ import annotations
 
@@ -13,9 +18,33 @@ import hashlib
 import json
 import os
 import re
+from pathlib import Path
 
 GA_MEASUREMENT_ID: str = os.environ.get("GA_MEASUREMENT_ID", "").strip()
 CF_BEACON_TOKEN: str = os.environ.get("CF_BEACON_TOKEN", "").strip()
+
+_FRONTEND_DIST = Path(os.environ.get("U13MF_FRONTEND_DIST", "/app/frontend/dist"))
+_JSON_LD_RE = re.compile(
+    r'<script type="application/ld\+json">(.*?)</script>', re.DOTALL
+)
+
+
+def _json_ld_hash() -> str | None:
+    """Compute sha256 of the built JSON-LD block so Chrome doesn't block it.
+
+    The hash changes when VITE_SITE_URL changes because the JSON-LD embeds the
+    canonical URL. Reading the built index.html at startup keeps this in sync
+    without a separate build step.
+    """
+    index = _FRONTEND_DIST / "index.html"
+    try:
+        html = index.read_text(encoding="utf-8")
+    except OSError:
+        return None
+    m = _JSON_LD_RE.search(html)
+    if not m:
+        return None
+    return _script_sha256(m.group(1))
 
 
 def _google_tag_bootstrap_script(measurement_id: str) -> str:
@@ -34,6 +63,11 @@ def _script_sha256(script: str) -> str:
 
 def _build_csp() -> str:
     script_src = ["'self'"]
+    # Whitelist the JSON-LD structured-data block — some Chrome versions apply
+    # script-src to <script type="application/ld+json"> elements.
+    json_ld = _json_ld_hash()
+    if json_ld:
+        script_src.append(json_ld)
     img_src = ["'self'", "data:"]
     connect_src = ["'self'"]
 

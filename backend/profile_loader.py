@@ -15,6 +15,9 @@ from models import ProfileDescriptor
 
 PROJECT_SETTINGS = "Metadata/project_settings.config"
 MODEL_SETTINGS = "Metadata/model_settings.config"
+MODEL_3D = "3D/3dmodel.model"
+
+_PLATE_GCODE_RE = re.compile(r"^Metadata/plate_\d+\.gcode$")
 
 
 class ProfileNotFoundError(Exception):
@@ -51,6 +54,120 @@ def read_project_settings(profile_path: Path) -> dict:
         raise ProfileLoadError(
             f"{profile_path.name} has malformed project_settings.config"
         ) from err
+
+
+def read_source_settings(source_path: Path) -> tuple[dict, str | None]:
+    """Read settings from any supported 3mf format.
+
+    Returns (settings_dict, detected_slicer) where detected_slicer is:
+      None         — Orca/Bambu format (caller checks printer_model for Bambu vs other)
+      "PrusaSlicer" — Metadata/Slic3r_PE.config present
+      "Cura"        — Cura/ directory present
+      "Unknown"     — valid 3mf but no recognised slicer config
+    Raises ProfileLoadError if the file is not a valid zip.
+    """
+    try:
+        with zipfile.ZipFile(source_path, "r") as zf:
+            names = zf.namelist()
+            _reject_sliced_gcode_without_geometry(source_path.name, zf, names)
+
+            if PROJECT_SETTINGS in names:
+                raw = zf.read(PROJECT_SETTINGS).decode("utf-8")
+                try:
+                    return json.loads(raw), None
+                except json.JSONDecodeError as err:
+                    raise ProfileLoadError(
+                        f"{source_path.name} has malformed project_settings.config"
+                    ) from err
+
+            if "Metadata/Slic3r_PE.config" in names:
+                raw = zf.read("Metadata/Slic3r_PE.config").decode("utf-8")
+                cfg: dict = {}
+                m = re.search(r"^; layer_height = ([0-9.]+)$", raw, re.MULTILINE)
+                if m:
+                    cfg["layer_height"] = m.group(1).strip()
+                # Parse semicolon-delimited filament arrays from INI comments.
+                for ps_key, orca_key in (
+                    ("filament_settings_id", "filament_settings_id"),
+                    ("filament_type", "filament_type"),
+                ):
+                    fm = re.search(rf'^; {ps_key} = (.+)$', raw, re.MULTILINE)
+                    if fm:
+                        raw_val = fm.group(1).strip()
+                        entries = [v.strip().strip('"') for v in raw_val.split(";")]
+                        cfg[orca_key] = entries
+                # extruder_colour has real per-slot colours set by the user.
+                # filament_colour is an orange placeholder PrusaSlicer writes by default.
+                # Prefer extruder_colour; fall back to filament_colour only if non-placeholder.
+                _PLACEHOLDER = {"#FF8000", "#FF8000FF", ""}
+                for colour_key in ("extruder_colour", "filament_colour"):
+                    fm = re.search(rf'^; {colour_key} = (.+)$', raw, re.MULTILINE)
+                    if fm:
+                        entries = [v.strip().strip('"') for v in fm.group(1).strip().split(";")]
+                        if any(e not in _PLACEHOLDER for e in entries):
+                            cfg["filament_colour"] = entries
+                            break
+                for ps_key, orca_key in (
+                    ("single_extruder_multi_material", "single_extruder_multi_material"),
+                    ("wipe_tower", "enable_prime_tower"),
+                ):
+                    fm = re.search(rf"^; {ps_key} = (.+)$", raw, re.MULTILINE)
+                    if fm:
+                        cfg[orca_key] = fm.group(1).strip()
+                return cfg, "PrusaSlicer"
+
+            cura_cfgs = [n for n in names if n.startswith("Cura/") and n.endswith(".cfg")]
+            if cura_cfgs:
+                lh = None
+                for cura_cfg in cura_cfgs:
+                    raw = zf.read(cura_cfg).decode("utf-8")
+                    m = re.search(r"^layer_height\s*=\s*([0-9.]+)$", raw, re.MULTILINE)
+                    if m:
+                        lh = m.group(1).strip()
+                        break
+                return ({"layer_height": lh} if lh else {}), "Cura"
+
+            if "3D/3dmodel.model" in names:
+                return {}, "Unknown"
+
+    except zipfile.BadZipFile as err:
+        raise ProfileLoadError(f"{source_path.name} is not a valid zip") from err
+
+    raise ProfileLoadError(f"{source_path.name}: unrecognised 3mf format")
+
+
+def _reject_sliced_gcode_without_geometry(
+    filename: str,
+    zf: zipfile.ZipFile,
+    names: list[str],
+) -> None:
+    """Reject sliced G-code 3MF packages that no longer contain editable geometry."""
+    if not any(_PLATE_GCODE_RE.match(n) for n in names):
+        return
+
+    has_external_object = any(
+        n.startswith("3D/Objects/") and n.endswith(".model") for n in names
+    )
+    if has_external_object:
+        return
+
+    model_xml = (
+        zf.read(MODEL_3D).decode("utf-8", errors="replace")
+        if MODEL_3D in names else ""
+    )
+    has_model_geometry = bool(
+        re.search(r"<(?:\w+:)?object\b", model_xml)
+        or re.search(r"<(?:\w+:)?mesh\b", model_xml)
+        or re.search(r"<(?:\w+:)?item\b", model_xml)
+    )
+    if has_model_geometry:
+        return
+
+    raise ProfileLoadError(
+        f"{filename} appears to be a sliced G-code 3MF with no model geometry. "
+        "Upload the original project .3mf instead; if you only have STL/model files, "
+        "open them in a slicer and export a project .3mf first."
+    )
 
 
 def read_model_settings(profile_path: Path) -> str | None:
@@ -171,7 +288,13 @@ def suggest_profile(
                 return 999.0
         return min(profiles, key=_dist)
 
-    return profiles[0]
+    # No layer height at all (bare geometry / unknown format) — default to 0.20 Standard.
+    default = next(
+        (p for p in profiles
+         if (p.layer_height or "").startswith("0.2") and "standard" in p.display_name.lower()),
+        profiles[0],
+    )
+    return default
 
 
 def resolve_profile(

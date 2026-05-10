@@ -13,7 +13,7 @@
         <div class="step-num">1</div>
         <div class="step-body">
           <div class="step-label">Upload</div>
-          <div class="step-desc">Drop your Bambu Studio <code>.3mf</code> project file</div>
+          <div class="step-desc">Drop a Bambu Studio or compatible slicer <code>.3mf</code> project file</div>
         </div>
       </div>
       <div class="step-arrow">→</div>
@@ -47,7 +47,7 @@
   <section class="card card-padded">
     <h2>U1 Convert <span class="badge beta">BETA</span></h2>
     <p>
-      Converts a Bambu Studio <code>.3mf</code> project file for use with the
+      Converts a Bambu Studio or compatible slicer <code>.3mf</code> project file for use with the
       <strong>Snapmaker U1</strong>. Your print settings, speeds, and filament
       configuration carry across — open the result in Snapmaker Orca and re-slice.
     </p>
@@ -60,6 +60,15 @@
         <tr><td>Bambu Lab H2S</td><td><span class="badge ok">Tested</span></td></tr>
         <tr><td>Bambu Lab A1 / A1 Mini</td><td><span class="badge ok">Tested</span></td></tr>
         <tr><td>Bambu Lab H2D</td><td><span class="badge ok">Tested</span></td></tr>
+      </tbody>
+    </table>
+    <h3>Experimental source formats</h3>
+    <table>
+      <thead><tr><th>Format</th><th>Status</th></tr></thead>
+      <tbody>
+        <tr><td>PrusaSlicer <code>.3mf</code>, including MMU painting</td><td><span class="badge expected">Experimental</span></td></tr>
+        <tr><td>Other Orca-based <code>.3mf</code> files</td><td><span class="badge expected">Experimental</span></td></tr>
+        <tr><td>Cura / basic geometry <code>.3mf</code> files</td><td><span class="badge expected">Experimental</span></td></tr>
       </tbody>
     </table>
   </section>
@@ -98,6 +107,8 @@
           Assign source colours to T1–T4, or skip to bring all colours through and let
           Snapmaker Orca handle assignment.
         </p>
+        <p class="tip">PrusaSlicer MMU face painting is experimental but converted into
+        Snapmaker Orca paint data during import.</p>
       </div>
     </div>
   </section>
@@ -108,7 +119,8 @@
     <ul>
       <li>Download your file before leaving — files are removed shortly after conversion.</li>
       <li>Maximum upload size: 200 MB.</li>
-      <li>Source files must be <code>.3mf</code> project files exported from Bambu Studio — not raw model files.</li>
+      <li>Use <code>.3mf</code> project files where possible. Bambu Studio is the primary target; PrusaSlicer, Cura, and other Orca-style files are experimental.</li>
+      <li>Sliced <code>.gcode.3mf</code> files are not supported when they contain no editable model geometry. Upload the original project <code>.3mf</code> instead.</li>
     </ul>
     <h3>Something not working?</h3>
     <p>

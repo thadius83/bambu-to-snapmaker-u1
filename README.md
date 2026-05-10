@@ -3,14 +3,27 @@
 [![BuyMeACoffee](.github/bmc-yellow.svg)](https://www.buymeacoffee.com/jdau)
 
 Self-hosted web app that converts Bambu Lab `.3mf` project files into
-Snapmaker U1-compatible `.3mf` files. The converted file opens cleanly in
-Snapmaker Orca ready for re-slicing — it preserves the creator's process
-settings (layer height, walls, infill, speeds, filaments, etc.) while swapping
-printer identity, custom G-code, and filament slot assignments.
+Snapmaker U1-compatible `.3mf` files, with experimental support for compatible
+slicer project files from Orca-based slicers, PrusaSlicer, and Cura. The
+converted file opens cleanly in Snapmaker Orca ready for re-slicing — it
+preserves the creator's process settings (layer height, walls, infill, speeds,
+filaments, colours, etc.) while swapping printer identity, custom G-code, and
+filament slot assignments.
 
 If you've ever downloaded a Makerworld project and discovered it's locked to a
 Bambu printer, this is the tool for you. Drop the `.3mf` in, get a U1-ready
 `.3mf` out. No manual JSON editing, no profile rebuilding.
+
+## Source file support
+
+| Source format | Status | Notes |
+|---|---|---|
+| Bambu Studio / Bambu Lab `.3mf` | Primary target | Full conversion path. |
+| Orca-format non-Bambu `.3mf` | Experimental | Flashforge, Anycubic, Creality, and similar Orca-based exports use the same project structure and are converted best-effort. |
+| PrusaSlicer `.3mf` | Experimental | Reads `Slic3r_PE.config`; Prusa MMU face painting is translated to Snapmaker Orca paint data. |
+| Cura `.3mf` | Experimental | Reads Cura user config where available. |
+| Bare geometry `.3mf` | Experimental | No slicer settings are available, so the converter defaults to the bundled `0.20 Standard` U1 profile. |
+| Sliced `.gcode.3mf` without model geometry | Not supported | These files contain printer-specific plate G-code but no editable model data. Upload the original project `.3mf` instead. |
 
 ## Hosted Version
 
@@ -46,9 +59,9 @@ No accounts, no database, no external dependencies beyond Docker.
 5. **Filament rules** — YAML-based matching on filament name / vendor / type.
    Applies per-key overrides (speed, accel, temperature). Editable in the
    browser without a restart.
-6. **Filament slot remap** — preserves Bambu's colour array order exactly
-   (slot N stays at slot N). Painted-face colour assignments are preserved
-   via `filament_maps`.
+6. **Filament slot remap** — preserves source colour array order exactly
+   (slot N stays at slot N). Painted-face colour assignments are preserved via
+   mesh paint data (`paint_color`) where the source format provides it.
 7. **Filament swap pauses** (auto-enabled for >4 colours) — detects when a
    physical toolhead must switch spools mid-print and inserts M600 pause
    elements one full layer before each swap, with a colour-coded swap guide
@@ -56,6 +69,9 @@ No accounts, no database, no external dependencies beyond Docker.
 8. **Slice cache strip** — removes `Metadata/plate_*.gcode` and
    `plate_*.json` so Snapmaker Orca is forced to re-slice rather than use
    stale Bambu output.
+9. **Sliced-only guard** — rejects `.gcode.3mf` uploads that contain plate
+   G-code but no editable model geometry, so users get a clear upload error
+   instead of a tiny output file with no objects.
 
 The diff view after conversion shows every change made before you download.
 
@@ -178,6 +194,7 @@ npm run dev      # → http://localhost:5173 (proxies /api to :8080)
 backend/
   main.py           FastAPI routes + job registry
   converter.py      Pipeline orchestrator (unzip → transform → rezip)
+  metadata_helpers.py  Sidecar XML/project metadata helpers
   models.py         Pydantic schemas (ConversionSettings, DiffReport, …)
   profile_loader.py Discover + read U1 reference profiles
   key_filter.py     Drop Bambu-only keys; clamp speed/accel ceilings
@@ -203,10 +220,15 @@ tmp/                Per-request working dirs, auto-cleaned
 
 ## Need a sample input?
 
-Grab any Bambu Studio `.3mf` from [Makerworld](https://makerworld.com/) or
-your own slicer history. Painted multi-colour models work — the converter
-preserves Bambu's colour array order and inserts pause stops for
-4+ colour prints when layer based. If using 5 or more colours with a painted model you will need to get creative with manual layer swaps
+Grab a Bambu Studio `.3mf` from [Makerworld](https://makerworld.com/) or your
+own slicer history. Compatible Orca-based, PrusaSlicer, Cura, and basic
+geometry `.3mf` files can also be tried, but they are experimental.
+
+Painted multi-colour models work — the converter preserves source colour slots
+and mesh paint data where available. For layer-based prints with more than 4
+colours, it can insert pause stops to guide manual spool swaps. For painted
+models with more than 4 colours, review the result in Snapmaker Orca and plan
+toolhead/manual swap handling before printing.
 
 ## Known limitations
 
@@ -215,6 +237,10 @@ preserves Bambu's colour array order and inserts pause stops for
   fully tested).
 - No conversion history or re-download after the cleanup window.
 - No in-app slicing — output must be re-sliced in Snapmaker Orca.
+- Non-Bambu source support is experimental and should be reviewed carefully in
+  Snapmaker Orca before printing.
+- Sliced `.gcode.3mf` files without editable model geometry cannot be converted;
+  upload the original project `.3mf`.
 - No support for colour mixing / full spectrum at this stage **planned**
 - As the Snapmaker Orca Slicer matures, the code will need to change to adapt.
 - Prints that are larger than the U1 build plate will convert, but obviously will need additional processing

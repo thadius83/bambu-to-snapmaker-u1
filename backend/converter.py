@@ -37,8 +37,15 @@ log = logging.getLogger("u13mf.converter")
 from diff_reporter import DiffBuilder
 from gcode_swapper import GCODE_KEYS, swap_gcode
 from key_filter import clamp_numeric_ceilings, filter_to_schema
+from metadata_helpers import (
+    minimal_model_settings,
+    minimal_slice_info,
+    rewrite_custom_gcode_per_layer,
+    rewrite_slice_info,
+    translate_prusa_mmu_paint,
+)
 from models import ConversionSettings, DiffReport, RuleDefinition, SlotRemapEvent
-from profile_loader import read_project_settings
+from profile_loader import read_project_settings, read_source_settings
 from rules_engine import FilamentContext, apply_rules
 from swap_pauses import insert_swap_pauses
 
@@ -114,6 +121,12 @@ def is_painted_model(archive_names: list[str], filament_count: int) -> bool:
 _SLICE_ARTIFACT_PATTERNS = (
     re.compile(r"^Metadata/plate_\d+\.gcode(\.md5)?$"),
     re.compile(r"^Metadata/plate_\d+\.json$"),
+    re.compile(r"^Metadata/_rels/"),  # rels files reference gcode — dangling after strip
+    # EXPERIMENTAL (commit 5b26e05+1): Orca per-preset embeds — strip to prevent
+    # Bambu-tuned values overriding the merged U1 project_settings.config.
+    # Roll back with: git checkout 5b26e05 -- backend/converter.py
+    re.compile(r"^Metadata/process_settings_\d+\.config$"),
+    re.compile(r"^Metadata/filament_settings_\d+\.config$"),
 )
 
 # Bambu-only metadata files that have no equivalent in Snapmaker Orca and
@@ -123,6 +136,15 @@ _BAMBU_ONLY_FILES: frozenset[str] = frozenset(
         "Metadata/filament_sequence.json",
         "Metadata/cut_information.xml",
         "Metadata/auxiliary.xml",
+    }
+)
+
+# Slicer-native metadata files that must not appear in Orca-format output.
+_PRUSA_ONLY_FILES: frozenset[str] = frozenset(
+    {
+        "Metadata/Slic3r_PE.config",
+        "Metadata/Slic3r_PE_model.config",
+        "Metadata/Prusa_Slicer_wipe_tower_information.xml",
     }
 )
 
@@ -164,7 +186,7 @@ def convert(
         settings.preserve_color_painting,
     )
 
-    source_cfg = read_project_settings(source_path)
+    source_cfg, _ = read_source_settings(source_path)
     reference_cfg = read_project_settings(reference_path)
 
     with zipfile.ZipFile(source_path) as _znames:
@@ -252,6 +274,27 @@ def convert(
             merged[key] = "1"
             n_slot += 1
 
+    # 5d-pre. Zero line-width sentinels: Bambu uses 0 to mean "derive from nozzle
+    # diameter." When the source nozzle differs from the U1's (e.g. 0.2mm → 0.4mm)
+    # these zeros produce 0-width paths in Orca, breaking both printing and
+    # paint-driven filament changes. Replace with reference value.
+    n_lw = 0
+    for key, val in list(merged.items()):
+        if not (key == "line_width" or key.endswith("_line_width")):
+            continue
+        if key == "brim_width":
+            continue  # 0 = no brim, intentional
+        try:
+            if float(str(val)) == 0.0 and key in reference_cfg:
+                ref_val = reference_cfg[key]
+                if float(str(ref_val)) > 0:
+                    merged[key] = ref_val
+                    n_lw += 1
+        except (TypeError, ValueError):
+            pass
+    if n_lw:
+        log.info("STAGE  sentinels: lw_zero=%d", n_lw)
+
     # 5d. Negative sentinels: Bambu uses -1 (inherit); substitute reference value.
     n_neg = 0
     for key in _NEGATIVE_SENTINEL_KEYS:
@@ -271,7 +314,7 @@ def convert(
             n_enum += 1
 
     if n_slot or n_neg or n_enum:
-        log.info("STAGE  sentinels: slot=%d neg=%d enum=%d", n_slot, n_neg, n_enum)
+        log.info("STAGE  sentinels: slot=%d neg=%d enum=%d lw=%d", n_slot, n_neg, n_enum, n_lw)
 
     # 6. clamp speed / accel ceilings
     if settings.clamp_speeds:
@@ -342,10 +385,29 @@ def convert(
         # can handle slot assignment at re-slice time.
         n_target = n_src
     else:
-        n_target = min(n_src, n_ref) if n_src > 0 else n_ref
+        _is_non_orca = "printer_model" not in source_cfg
+        if n_src > 0:
+            # Non-Orca sources (PrusaSlicer, Cura) carry their own filament
+            # arrays — pass them all through; don't cap at the reference slot
+            # count which is tuned for Bambu prints.
+            n_target = n_src if _is_non_orca else min(n_src, n_ref)
+        elif "filament_settings_id" in source_cfg:
+            # Orca/Bambu source with an explicit empty filament list.
+            n_target = n_ref
+        else:
+            # Non-Orca source with no filament info at all — default to 1 slot.
+            n_target = 1
     remap = _normalise_filament_arrays(
         merged, source_cfg, diff, slot_map=settings.slot_map or {}, n_target=n_target
     )
+    # Clip or pad per-slot hardware arrays not handled by _normalise_filament_arrays.
+    for _hw_key in ("nozzle_diameter", "nozzle_type", "nozzle_volume"):
+        _hw_val = merged.get(_hw_key)
+        if isinstance(_hw_val, list) and _hw_val:
+            if len(_hw_val) > n_target:
+                merged[_hw_key] = _hw_val[:n_target]
+            elif len(_hw_val) < n_target:
+                merged[_hw_key] = _hw_val + [_hw_val[-1]] * (n_target - len(_hw_val))
     log.info("STAGE  filament-normalise: remap=%s", remap)
 
     # 9b. For Bambu-to-Bambu: remap each source filament slot to the closest
@@ -400,7 +462,7 @@ def convert(
                 if swap_instrs:
                     # Swap insertion adds new type=1 pause markers but must not
                     # leave any existing Bambu type=1 commands untouched.
-                    custom_gcode_xml_override = _rewrite_custom_gcode_per_layer(
+                    custom_gcode_xml_override = rewrite_custom_gcode_per_layer(
                         modified_xml, pause_cmd
                     )
                     diff._report.swap_instructions = swap_instrs
@@ -704,9 +766,10 @@ def _write_output_archive(
 
     # Read source bed extents for the build-item shift calculation.
     with zipfile.ZipFile(source_path, "r") as _zpa:
-        _src_area = json.loads(
-            _zpa.read(PROJECT_SETTINGS).decode("utf-8")
-        ).get("printable_area") or ["0x0"]
+        _src_area = (
+            json.loads(_zpa.read(PROJECT_SETTINGS).decode("utf-8")).get("printable_area")
+            if PROJECT_SETTINGS in _zpa.namelist() else None
+        ) or ["0x0"]
     _ref_area = new_project_settings.get("printable_area") or ["0x0"]
 
     with zipfile.ZipFile(source_path, "r") as zin, zipfile.ZipFile(
@@ -732,7 +795,8 @@ def _write_output_archive(
             # Slice-cache artifacts always stripped; Bambu-only metadata
             # stripped only for U1 output (irrelevant to Snapmaker Orca).
             strip_bambu = not preserve_bambu_metadata and name in _BAMBU_ONLY_FILES
-            if _is_slice_artifact(name) or strip_bambu:
+            strip_foreign = name in _PRUSA_ONLY_FILES or name.startswith("Cura/")
+            if _is_slice_artifact(name) or strip_bambu or strip_foreign:
                 diff.record_slice_artifact_stripped(name)
                 continue
 
@@ -741,9 +805,35 @@ def _write_output_archive(
                 continue
 
             if name == MODEL_3D and not preserve_bambu_metadata:
-                shifted_xml, was_shifted = _bed_shift(
-                    zin.read(MODEL_3D).decode("utf-8"), _src_area, _ref_area
-                )
+                model_xml = zin.read(MODEL_3D).decode("utf-8")
+                # For non-Orca sources: replace PrusaSlicer namespace with BambuStudio
+                # namespace so Orca accepts the file as a valid project rather than
+                # falling back to geometry-only mode.
+                if 'xmlns:slic3rpe=' in model_xml:
+                    model_xml, paint_attrs = translate_prusa_mmu_paint(model_xml)
+                    model_xml = re.sub(r'\s+xmlns:slic3rpe="[^"]*"', "", model_xml)
+                    model_xml = re.sub(r'\s+slic3rpe:\w+="[^"]*"', "", model_xml)
+                    model_xml = re.sub(r'\s*<metadata\s+name="slic3rpe:[^"]*">[^<]*</metadata>', "", model_xml)
+                    model_xml = re.sub(
+                        r'<metadata name="Application">[^<]*</metadata>',
+                        '<metadata name="Application">BambuStudio-2.3.1</metadata>',
+                        model_xml,
+                        count=1,
+                    )
+                    model_xml = re.sub(
+                        r'(<model\b[^>]*)(>)',
+                        r'\1 xmlns:BambuStudio="http://schemas.bambulab.com/package/2021"\2',
+                        model_xml, count=1,
+                    )
+                    if 'BambuStudio:3mfVersion' not in model_xml:
+                        model_xml = model_xml.replace(
+                            '<resources>',
+                            '<metadata name="BambuStudio:3mfVersion">1</metadata>\n <resources>',
+                            1,
+                        )
+                    if paint_attrs:
+                        log.info("STAGE  prusa-paint: %d mmu_segmentation attrs → paint_color", paint_attrs)
+                shifted_xml, was_shifted = _bed_shift(model_xml, _src_area, _ref_area)
                 zout.writestr(item, shifted_xml.encode("utf-8"))
                 if was_shifted:
                     log.info("STAGE  bed-shift: build items shifted to U1 bed origin")
@@ -759,7 +849,7 @@ def _write_output_archive(
                 continue
 
             if name == SLICE_INFO:
-                modified = _rewrite_slice_info(
+                modified = rewrite_slice_info(
                     zin.read(SLICE_INFO).decode("utf-8"),
                     target_printer_model,
                 )
@@ -772,7 +862,7 @@ def _write_output_archive(
                     zout.writestr(name, custom_gcode_xml_override)
                 else:
                     pause_cmd = new_project_settings.get("machine_pause_gcode", "M600")
-                    modified = _rewrite_custom_gcode_per_layer(
+                    modified = rewrite_custom_gcode_per_layer(
                         zin.read(CUSTOM_GCODE_XML).decode("utf-8"), pause_cmd
                     )
                     zout.writestr(name, modified)
@@ -781,10 +871,29 @@ def _write_output_archive(
             # Everything else copies through verbatim.
             zout.writestr(item, zin.read(name))
 
-        # If source had no model_settings but reference does, seed it.
+        # If source had no project_settings (non-Orca format), write the merged one now.
         with zipfile.ZipFile(source_path, "r") as zin_check:
-            has_model = MODEL_SETTINGS in zin_check.namelist()
-        if not has_model and ref_model_settings:
+            src_names = zin_check.namelist()
+        if PROJECT_SETTINGS not in src_names:
+            zout.writestr(PROJECT_SETTINGS, new_proj_bytes)
+            # Generate a minimal model_settings.config from actual object IDs in the
+            # source model so Orca can load the scene without reference object confusion.
+            if MODEL_SETTINGS not in src_names:
+                zout.writestr(MODEL_SETTINGS, minimal_model_settings(src_names, source_path))
+            # Orca requires slice_info.config to recognise the file as a project.
+            if SLICE_INFO not in src_names:
+                zout.writestr(SLICE_INFO, minimal_slice_info(target_printer_model))
+            # Orca's web layer expects plate_1.json; missing file causes JSON parse error.
+            if "Metadata/plate_1.json" not in src_names:
+                zout.writestr("Metadata/plate_1.json", json.dumps({
+                    "filament_colors": new_project_settings.get("filament_colour") or [],
+                    "filament_ids": new_project_settings.get("filament_settings_id") or [],
+                    "first_extruder": 0,
+                    "is_seq_print": False,
+                    "version": 2,
+                }))
+        elif MODEL_SETTINGS not in src_names and ref_model_settings:
+            # Orca source had no model_settings — seed from reference as before.
             zout.writestr(MODEL_SETTINGS, ref_model_settings)
 
 
@@ -860,41 +969,3 @@ def _rewrite_model_settings(xml_text: str, remap: dict[int, int]) -> str:
             meta.set("value", " ".join(new_slots) if new_slots else raw)
 
     return ET.tostring(root, encoding="unicode", xml_declaration=False)
-
-def _rewrite_slice_info(xml_text: str, printer_model: str = "Snapmaker U1") -> str:
-    """Swap the printer_model_id reference so slice_info isn't lying about
-    which printer produced the output (if one exists at all — Bambu ships
-    an empty slice_info.config on unsliced uploads)."""
-    try:
-        root = ET.fromstring(xml_text)
-    except ET.ParseError:
-        return xml_text
-
-    for item in root.iter():
-        if item.get("key") == "printer_model_id":
-            item.set("value", printer_model)
-
-    return ET.tostring(root, encoding="unicode", xml_declaration=False)
-
-
-def _rewrite_custom_gcode_per_layer(xml_text: str, pause_gcode: str) -> str:
-    """Rewrite per-layer G-code commands to use U1-compatible equivalents.
-
-    Bambu type codes in <layer> elements:
-      0 = color change, 1 = pause print, 2 = custom G-code,
-      3 = template custom G-code, 4 = filament change
-
-    Type 1 (pause) carries Bambu-specific commands (e.g. M400 U1) in the
-    gcode attribute that will crash U1 firmware. We replace them with the
-    U1 reference profile's machine_pause_gcode value. All other types pass
-    through unchanged.
-    """
-    try:
-        root = ET.fromstring(xml_text)
-    except ET.ParseError:
-        return xml_text
-
-    for layer in root.iter("layer"):
-        if layer.get("type") == "1":
-            layer.set("gcode", pause_gcode)
-    return '<?xml version="1.0" encoding="utf-8"?>\n' + ET.tostring(root, encoding="unicode")

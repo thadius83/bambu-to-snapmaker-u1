@@ -138,8 +138,9 @@
       sourceSlicer = s.source_slicer ?? null;
       detectedFilaments = s.filaments;
       insertSwapPauses = s.filaments.length > 4 && !s.is_painted_model;
-    } catch {
-      analyseError = 'Could not read file — is this a Bambu Studio .3mf project?';
+    } catch (err) {
+      const message = err instanceof Error ? err.message.replace(/^\d+:\s*/, '') : '';
+      analyseError = message || 'Could not read file — is this a valid .3mf file?';
       phase = 'error';
     } finally {
       analysing = false;
@@ -349,7 +350,7 @@
 
             {#if alreadyConverted}
               <div class="warn-banner" role="alert">
-                <strong>Already converted:</strong> this file's printer is already set to Snapmaker U1. Re-converting is usually unnecessary and may overwrite tuned settings.
+                <strong>Already converted:</strong> this file's printer is already set to Snapmaker U1. Upload the original source file to convert again.
               </div>
             {/if}
 
@@ -380,7 +381,7 @@
 
             {#if sourceSlicer}
               <div class="warn-banner" role="alert">
-                <strong>{sourceSlicer} file detected:</strong> this converter is designed for Bambu Studio .3mf files. Conversion will proceed best-effort — some settings may not translate correctly.
+                <strong>Experimental — non-Bambu file:</strong> source detected as <em>{sourceSlicer}</em>. Profile auto-selected from layer height. Re-slice in Snapmaker Orca before printing and verify all settings.
               </div>
             {/if}
 
@@ -433,7 +434,7 @@
               <button
                 class="primary convert-btn"
                 onclick={handleConvert}
-                disabled={!file || !selectedProfile || phase === 'converting' || analysing}
+                disabled={!file || !selectedProfile || phase === 'converting' || analysing || alreadyConverted}
               >
                 Convert to U1
               </button>
