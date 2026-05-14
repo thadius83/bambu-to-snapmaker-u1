@@ -1,5 +1,5 @@
 # ---- Stage 1: build the Svelte frontend ------------------------------------
-FROM node:22-alpine AS frontend-build
+FROM node:26-alpine AS frontend-build
 
 ARG VITE_SITE_URL=https://u1convert.com
 ENV VITE_SITE_URL=${VITE_SITE_URL}
