@@ -477,6 +477,14 @@
       <span class="subtle">·</span>
       <a href="/privacy.html">Privacy</a>
     </div>
+    <div class="footer-links">
+      <span class="subtle">Also by the author:</span>
+      <a href="https://gridforge.jd.au" target="_blank" rel="noopener noreferrer">GridForge</a>
+      <span class="subtle">·</span>
+      <a href="https://iprintstuff.com.au" target="_blank" rel="noopener noreferrer">iPrintStuff</a>
+      <span class="subtle">·</span>
+      <a href="https://jd.au" target="_blank" rel="noopener noreferrer">jd.au</a>
+    </div>
   </footer>
 </div>
 
