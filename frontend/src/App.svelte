@@ -255,7 +255,7 @@
         class="nav-link"
         class:active={route === 'help'}
         onclick={() => navigate('help')}
-      >Help</button>
+      >FAQ &amp; Help</button>
     </nav>
 
     <div class="nav-right">
@@ -298,8 +298,8 @@
 
     {:else if route === 'help'}
       <div class="page-header">
-        <h1>Help &amp; Support</h1>
-        <p class="muted">Supported printers, how conversion works, and known limitations.</p>
+        <h1>FAQ &amp; Help</h1>
+        <p class="muted">Common questions, supported printers, how conversion works, and known limitations.</p>
       </div>
       <Help onNavigate={navigate} />
 

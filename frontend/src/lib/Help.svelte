@@ -113,6 +113,45 @@
     </div>
   </section>
 
+  <!-- FAQ -->
+  <section class="card card-padded">
+    <h2>Frequently Asked Questions</h2>
+    <div class="faq">
+      <details>
+        <summary>What file format does the converter accept?</summary>
+        <p>The converter accepts <code>.3mf</code> project files from Bambu Studio or any compatible slicer (OrcaSlicer, PrusaSlicer). Sliced <code>.gcode.3mf</code> files are not supported when they contain no editable model geometry — upload the original project <code>.3mf</code> instead.</p>
+      </details>
+      <details>
+        <summary>Which Snapmaker models does it support?</summary>
+        <p>The converter outputs files for the Snapmaker U1 toolhead, compatible with the Snapmaker Artisan and J1/J1s. The converted file is re-sliced in Snapmaker Orca before printing.</p>
+      </details>
+      <details>
+        <summary>Which Bambu printers are supported as a source?</summary>
+        <p>Tested: X1C, X1E, P1S, P1P, H2S, H2D, A1, and A1 Mini. PrusaSlicer (including MMU painting) and other OrcaSlicer-based formats are supported experimentally.</p>
+      </details>
+      <details>
+        <summary>Is it free to use?</summary>
+        <p>Yes — completely free, no account or sign-up required. Files are processed in memory and never stored.</p>
+      </details>
+      <details>
+        <summary>Do I need to re-slice after conversion?</summary>
+        <p>Yes. Open the converted <code>.3mf</code> in Snapmaker Orca and re-slice before printing. No manual edits are needed — G-code, filament data, and profile settings are all handled automatically.</p>
+      </details>
+      <details>
+        <summary>Can it handle more than 4 colours?</summary>
+        <p>Yes. The U1 has 4 physical toolheads. For layer-based colour changes, enable <em>Insert filament swap pauses</em> in settings. For painted models, colour assignment is handled at re-slice time in Snapmaker Orca. For more than 4 colours, a toolhead assignment step is shown after upload.</p>
+      </details>
+      <details>
+        <summary>What happens to my uploaded files?</summary>
+        <p>Files are processed in memory and removed shortly after conversion. Nothing is stored on disk and no account is required. See the <a href="/privacy.html">Privacy Policy</a> for details.</p>
+      </details>
+      <details>
+        <summary>What is the maximum file size?</summary>
+        <p>200 MB.</p>
+      </details>
+    </div>
+  </section>
+
   <!-- General + Feedback -->
   <section class="card card-padded">
     <h2>General</h2>
@@ -234,6 +273,16 @@
   .badge.ok { background: color-mix(in srgb, var(--success) 15%, transparent); color: var(--success); }
   .badge.expected { background: color-mix(in srgb, var(--accent) 15%, transparent); color: var(--accent); }
   .badge.beta { background: color-mix(in srgb, var(--accent) 15%, transparent); color: var(--accent); }
+
+  /* FAQ accordion */
+  .faq { display: flex; flex-direction: column; gap: 4px; }
+  details { border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+  details[open] { background: var(--bg-raised); }
+  summary { font-size: 13.5px; font-weight: 500; padding: 10px 12px; cursor: pointer; list-style: none; display: flex; justify-content: space-between; align-items: center; }
+  summary::-webkit-details-marker { display: none; }
+  summary::after { content: '+'; color: var(--text-muted); font-size: 16px; font-weight: 400; flex-shrink: 0; margin-left: 12px; }
+  details[open] summary::after { content: '−'; }
+  details p { margin: 0; padding: 0 12px 12px; font-size: 13px; color: var(--text-muted); line-height: 1.6; }
 
   @media (max-width: 600px) {
     .colour-grid { grid-template-columns: 1fr; }

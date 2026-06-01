@@ -41,11 +41,99 @@
       "description": "Convert Bambu Studio .3mf project files to Snapmaker U1 format in seconds. Free online tool — upload, select a quality profile, download, and re-slice in Snapmaker Orca.",
       "applicationCategory": "UtilitiesApplication",
       "operatingSystem": "Web",
+      "inLanguage": "en",
+      "author": {
+        "@type": "Person",
+        "name": "James D",
+        "url": "https://jd.au"
+      },
+      "featureList": [
+        "Convert Bambu Studio .3mf to Snapmaker U1 format",
+        "Auto-match layer height and quality profile",
+        "Replace printer G-code with Snapmaker U1 equivalents",
+        "Remap filament slots and colour metadata",
+        "Support for multi-colour prints with more than 4 colours",
+        "Insert filament swap pauses for layer-based colour changes",
+        "Diff report showing every change made during conversion",
+        "Support for PrusaSlicer MMU and OrcaSlicer experimental formats"
+      ],
       "offers": {
         "@type": "Offer",
         "price": "0",
         "priceCurrency": "USD"
       }
+    }
+    </script>
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "FAQPage",
+      "mainEntity": [
+        {
+          "@type": "Question",
+          "name": "What file format does the converter accept?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "The converter accepts .3mf project files from Bambu Studio or any compatible slicer (OrcaSlicer, PrusaSlicer). Sliced .gcode.3mf files are not supported when they contain no editable model geometry — upload the original project .3mf instead."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Which Snapmaker models does it support?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "The converter outputs files for the Snapmaker U1 toolhead, compatible with the Snapmaker Artisan and J1/J1s printers. The converted file is re-sliced in Snapmaker Orca before printing."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Which Bambu Lab printers are supported as a source?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Tested and supported source printers: Bambu Lab X1C, X1E, P1S, P1P, H2S, H2D, A1, and A1 Mini. PrusaSlicer (including MMU painting) and other OrcaSlicer-based formats are supported experimentally."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Is it free to use?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Yes, the converter is completely free with no account or sign-up required. Files are processed in memory and never stored."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Do I need to re-slice the file after conversion?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Yes. After downloading the converted .3mf, open it in Snapmaker Orca and re-slice before sending to the printer. No manual edits are needed — the converter handles G-code, filament data, and profile settings automatically."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Can it handle multi-colour prints with more than 4 colours?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Yes. The U1 has 4 physical toolheads. For layer-based colour changes, the converter can insert automatic filament swap pauses (enable 'Insert filament swap pauses' in settings). For painted models, colour assignment is handled at re-slice time in Snapmaker Orca. For more than 4 colours, the converter provides a toolhead assignment step."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "What happens to my uploaded files?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Uploaded files are processed in memory and never stored on disk. Files are removed shortly after conversion. No accounts or tracking are used."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "What is the maximum file size?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "The maximum upload size is 200 MB."
+          }
+        }
+      ]
     }
     </script>
 

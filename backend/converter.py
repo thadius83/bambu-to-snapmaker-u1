@@ -785,6 +785,15 @@ def _write_output_archive(
                 else None
             )
 
+        # Read plate_1.json before the loop so we can preserve is_seq_print
+        # (print-by-object flag) and bed_type when we strip the slice-cache version.
+        _src_plate1: dict = {}
+        if "Metadata/plate_1.json" in zin.namelist():
+            try:
+                _src_plate1 = json.loads(zin.read("Metadata/plate_1.json"))
+            except Exception:
+                pass
+
         for item in zin.infolist():
             name = item.filename
 
@@ -874,6 +883,18 @@ def _write_output_archive(
         # If source had no project_settings (non-Orca format), write the merged one now.
         with zipfile.ZipFile(source_path, "r") as zin_check:
             src_names = zin_check.namelist()
+        # Always write a minimal plate_1.json — the source version was stripped as a
+        # slice-cache artifact (G-code timings, bbox data), but is_seq_print
+        # (print-by-object) and bed_type are user settings that must survive conversion.
+        zout.writestr("Metadata/plate_1.json", json.dumps({
+            "filament_colors": new_project_settings.get("filament_colour") or [],
+            "filament_ids": new_project_settings.get("filament_settings_id") or [],
+            "first_extruder": 0,
+            "is_seq_print": bool(_src_plate1.get("is_seq_print", False)),
+            "bed_type": _src_plate1.get("bed_type", ""),
+            "version": 2,
+        }))
+
         if PROJECT_SETTINGS not in src_names:
             zout.writestr(PROJECT_SETTINGS, new_proj_bytes)
             # Generate a minimal model_settings.config from actual object IDs in the
@@ -883,15 +904,6 @@ def _write_output_archive(
             # Orca requires slice_info.config to recognise the file as a project.
             if SLICE_INFO not in src_names:
                 zout.writestr(SLICE_INFO, minimal_slice_info(target_printer_model))
-            # Orca's web layer expects plate_1.json; missing file causes JSON parse error.
-            if "Metadata/plate_1.json" not in src_names:
-                zout.writestr("Metadata/plate_1.json", json.dumps({
-                    "filament_colors": new_project_settings.get("filament_colour") or [],
-                    "filament_ids": new_project_settings.get("filament_settings_id") or [],
-                    "first_extruder": 0,
-                    "is_seq_print": False,
-                    "version": 2,
-                }))
         elif MODEL_SETTINGS not in src_names and ref_model_settings:
             # Orca source had no model_settings — seed from reference as before.
             zout.writestr(MODEL_SETTINGS, ref_model_settings)
