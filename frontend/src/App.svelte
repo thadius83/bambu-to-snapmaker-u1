@@ -249,7 +249,7 @@
       >
         <span class="nav-label-full">Bambu Labs → Snapmaker U1</span>
         <span class="nav-label-short">Convert</span>
-        <span class="nav-badge beta">BETA</span>
+
       </button>
       <button
         class="nav-link"
@@ -623,7 +623,7 @@
     font-size: 9px; font-weight: 700; letter-spacing: 0.04em;
     padding: 1px 4px; border-radius: 3px; vertical-align: middle;
   }
-  .nav-badge.beta { background: color-mix(in srgb, var(--accent) 20%, transparent); color: var(--accent); }
+
   .nav-badge.alpha { background: color-mix(in srgb, var(--warn) 20%, transparent); color: var(--warn); }
 
   .nav-right {
