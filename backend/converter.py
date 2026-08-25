@@ -70,13 +70,13 @@ IDENTITY_COPY_KEYS: tuple[str, ...] = (
 # Bambu uses "0" as an auto-sentinel for these filament-role slot keys; U1 Orca
 # requires an explicit 1-based slot number.  Only the sentinel is replaced —
 # any intentional non-zero assignment from the source is preserved.
+# Note: support_filament, support_interface_filament, wipe_tower_filament are
+# intentionally excluded — U1 Orca also uses 0 for those (meaning "auto / match
+# object filament"), so 0 is valid and must not be replaced.
 _FILAMENT_SLOT_SENTINEL_KEYS: frozenset[str] = frozenset({
     "wall_filament",
     "sparse_infill_filament",
     "solid_infill_filament",
-    "support_filament",
-    "support_interface_filament",
-    "wipe_tower_filament",
 })
 
 # Bambu uses -1 as an "inherit / auto" sentinel for these keys; Orca requires
