@@ -218,6 +218,16 @@ def apply_rules(
             # Orca settings are always JSON strings; coerce numeric overrides.
             if isinstance(v, (int, float)) and not isinstance(v, bool):
                 v = str(v)
+            # Numeric rule overrides act as ceilings: only apply when the
+            # current value exceeds the rule's limit.  Non-numeric overrides
+            # (booleans, strings) always apply unconditionally.
+            try:
+                rule_num = float(v)
+                cur_num = float(str(out.get(k, v)))
+                if cur_num <= rule_num:
+                    continue  # source is already at or below the ceiling
+            except (TypeError, ValueError):
+                pass  # non-numeric — fall through to unconditional apply
             out[k] = v
             applied[k] = v
         events.append(
