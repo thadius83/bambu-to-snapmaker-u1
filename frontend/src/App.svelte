@@ -7,7 +7,8 @@
   import Feedback from './lib/Feedback.svelte';
   import RuleEditor from './lib/RuleEditor.svelte';
   import Help from './lib/Help.svelte';
-  import { listProfiles, suggestProfile, convert, type ProfileDescriptor, type ConvertResult } from './lib/api';
+  import { listProfiles, suggestProfile, convert, type ProfileDescriptor, type ConvertResult, type FilamentInfo } from './lib/api';
+  import { filamentBackground } from './lib/filamentColours';
   import ToolheadAssign from './lib/ToolheadAssign.svelte';
   import VoteBanner from './lib/VoteBanner.svelte';
   import VoteToast from './lib/VoteToast.svelte';
@@ -82,7 +83,7 @@
   let isColourMixed = $state(false);
   let sourceSlicer = $state<string | null>(null);
   let paintedSlotMap = $state<Record<number, number>>({});
-  let detectedFilaments = $state<Array<{index:number;settings_id:string|null;filament_type:string|null;vendor:string|null;colour:string|null}>>([]);
+  let detectedFilaments = $state<FilamentInfo[]>([]);
   let applyRules = $state(true);
   let insertSwapPauses = $state(false);
   let showSlotModal = $state(false);
@@ -431,7 +432,7 @@
                     {#each detectedFilaments as f}
                       <div
                         class="swatch-chip"
-                        style="background:{f.colour ?? '#888'}"
+                        style="background:{filamentBackground(f)}"
                         title="{f.settings_id ?? f.filament_type ?? 'Unknown'}"
                       ></div>
                     {/each}

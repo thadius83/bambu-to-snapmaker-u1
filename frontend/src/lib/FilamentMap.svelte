@@ -1,11 +1,6 @@
 <script lang="ts">
-  interface FilamentInfo {
-    index: number;
-    settings_id: string | null;
-    filament_type: string | null;
-    vendor: string | null;
-    colour: string | null;
-  }
+  import type { FilamentInfo } from './api';
+  import { filamentBackground } from './filamentColours';
 
   interface Props {
     filaments: FilamentInfo[];
@@ -55,7 +50,7 @@
       {@const dark = isDark(colour)}
       {@const dropped = isDropped(f.index)}
       <div class="fm-row" class:fm-row-dropped={dropped}>
-        <div class="swatch" style="background:{colour}" class:swatch-dropped={dropped}>
+        <div class="swatch" style="background:{filamentBackground(f)}" class:swatch-dropped={dropped}>
           <span class="swatch-label" class:dark class:light={!dark}>
             {f.filament_type ?? '?'}
           </span>

@@ -48,6 +48,7 @@ from pydantic import BaseModel
 import telemetry
 from converter import convert, is_painted_model, _MULTIPLATE_SPAN_MM
 from diff_reporter import summarise
+from filament_colors import describe_filaments
 from models import ConversionSettings, ProfileDescriptor, RuleDefinition
 from profile_loader import (
     ProfileLoadError,
@@ -469,21 +470,9 @@ async def api_suggest_profile(file: UploadFile = File(...)) -> dict[str, Any]:
         source_printer = cfg.get("printer_model", "")
         already_converted = "snapmaker" in source_printer.lower()
 
-        # Build per-slot filament info for the UI slot mapper.
+        # Preserve the complete palette for preview and toolhead assignment.
         ids = cfg.get("filament_settings_id") or []
-        types = cfg.get("filament_type") or []
-        vendors = cfg.get("filament_vendor") or []
-        colours = cfg.get("filament_colour") or []
-        filaments = [
-            {
-                "index": i,
-                "settings_id": ids[i] if i < len(ids) else None,
-                "filament_type": types[i] if i < len(types) else None,
-                "vendor": vendors[i] if i < len(vendors) else None,
-                "colour": colours[i] if i < len(colours) else None,
-            }
-            for i in range(len(ids))
-        ]
+        filaments = describe_filaments(cfg)
 
         n_filaments = len(ids)
         _painted = is_painted_model(_names, n_filaments)

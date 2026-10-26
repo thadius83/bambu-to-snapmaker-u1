@@ -35,6 +35,7 @@ from xml.etree import ElementTree as ET
 log = logging.getLogger("u13mf.converter")
 
 from diff_reporter import DiffBuilder
+from filament_colors import translate_filament_colors
 from gcode_swapper import GCODE_KEYS, swap_gcode
 from key_filter import clamp_numeric_ceilings, filter_to_schema
 from metadata_helpers import (
@@ -211,6 +212,8 @@ def convert(
 
     # 3. identity swap
     merged = _apply_identity_swap(source_cfg, reference_cfg, diff)
+    if not preserve_bambu_metadata:
+        merged = translate_filament_colors(merged)
     # Append suffix so Orca cannot exact-match a U1 library profile and load
     # its defaults over the embedded source settings.
     if merged.get("print_settings_id"):
@@ -231,7 +234,13 @@ def convert(
     merged, dropped = filter_to_schema(
         merged,
         schema_keys,
-        keep_keys=["custom_gcode_per_layer", "internal_bridge_support_thickness"],
+        keep_keys=[
+            "custom_gcode_per_layer",
+            "internal_bridge_support_thickness",
+            # Valid Snapmaker fields may be missing from older references.
+            "filament_multi_colors",
+            "filament_colour_mode",
+        ],
     )
     diff.extend_keys_dropped(dropped)
     log.info("STAGE  key-filter: %d keys dropped", len(dropped))

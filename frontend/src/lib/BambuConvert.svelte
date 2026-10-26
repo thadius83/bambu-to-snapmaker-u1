@@ -2,7 +2,8 @@
   import { onMount } from 'svelte';
   import Upload from './Upload.svelte';
   import DiffView from './DiffView.svelte';
-  import { listBambuPrinters, convertBambu, suggestProfile, type ConvertResult } from './api';
+  import { listBambuPrinters, convertBambu, suggestProfile, type ConvertResult, type FilamentInfo } from './api';
+  import { filamentBackground } from './filamentColours';
 
   type Phase = 'idle' | 'ready' | 'converting' | 'done' | 'error';
 
@@ -17,7 +18,7 @@
   let clampSpeeds = $state(true);
   let insertSwapPauses = $state(false);
 
-  let detectedFilaments = $state<Array<{ colour: string | null; settings_id: string | null; filament_type: string | null }>>([]);
+  let detectedFilaments = $state<FilamentInfo[]>([]);
   let analysing = $state(false);
 
   onMount(async () => {
@@ -134,7 +135,7 @@
               {#each detectedFilaments as f}
                 <div
                   class="swatch-chip"
-                  style="background:{f.colour ?? '#888'}"
+                  style="background:{filamentBackground(f)}"
                   title="{f.settings_id ?? f.filament_type ?? 'Unknown'}"
                 ></div>
               {/each}

@@ -78,6 +78,8 @@ export interface FilamentInfo {
   filament_type: string | null;
   vendor: string | null;
   colour: string | null;
+  colours?: string[];
+  colour_mode?: 'split' | 'gradient';
 }
 
 export async function suggestProfile(

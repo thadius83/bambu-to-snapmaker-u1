@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { FilamentInfo } from './api';
+  import { filamentBackground } from './filamentColours';
 
   interface Props {
     filaments: FilamentInfo[];
@@ -78,7 +79,7 @@
         <div class="row" class:overflow={isOverflow && !assigned}>
           <span
             class="swatch"
-            style="background:{f.colour ?? '#888'}"
+            style="background:{filamentBackground(f)}"
             title={f.settings_id ?? f.filament_type ?? 'Unknown'}
           ></span>
           <span class="label">
