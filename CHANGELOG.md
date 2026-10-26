@@ -31,6 +31,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   instead of original project files.
 - Improved upload analysis errors so specific backend validation messages are
   shown in the UI.
+- Apply the selected U1 profile's standby cooling settings so parked toolheads
+  cool between uses.
+- Keep filament temperatures and fan settings aligned when remapping slots.
+- Normalize Bambu filament settings stored per extruder variant for U1
+  toolheads, preserving the correct settings for each filament.
+- Preserve source nozzle and bed temperatures when applying PETG tuning rules.
+- Position filament swap pauses using the print's actual layer height and
+  preserve their order relative to colour changes.
+- Show the correct unload colour in swap instructions when source filaments
+  share a toolhead or are assigned to different toolheads.
+- Use the target printer's bed dimensions, exclusion area, model, and texture
+  to prevent incorrect bed displays and phantom bed geometry.
+- Correct single-plate model placement for the U1 bed origin.
+- Treat zero reference speed limits as automatic settings instead of clamping
+  speeds to zero.
+- Apply rule overrides when a setting is absent from the source, while keeping
+  speed and acceleration overrides as ceilings.
+- Preserve automatic support and support-interface filament assignments.
+- Preserve print-by-object mode during conversion.
+- Read failed API responses once so JSON, HTML, plain text, and empty error
+  responses retain useful messages and HTTP status codes. Oversized uploads
+  rejected with an HTML HTTP 413 response now show a clear message that the file is too large.
 
 ## [0.1.0] - 2026-05-05
 

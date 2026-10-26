@@ -506,7 +506,7 @@ def convert(
         with zipfile.ZipFile(source_path) as _zcheck:
             if CUSTOM_GCODE_XML in _zcheck.namelist():
                 raw_xml = _zcheck.read(CUSTOM_GCODE_XML).decode("utf-8")
-                colours = merged.get("filament_colour") or []
+                colours = source_cfg.get("filament_colour") or []
                 pause_cmd = merged.get("machine_pause_gcode", "M600")
                 modified_xml, swap_instrs = insert_swap_pauses(
                     raw_xml, remap, colours, pause_cmd,

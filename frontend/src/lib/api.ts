@@ -56,12 +56,16 @@ export interface ConvertResult {
 
 async function handle<T>(response: Response): Promise<T> {
   if (!response.ok) {
-    let detail: string;
+    const text = await response.text();
+    let detail = text || response.statusText || 'Request failed';
     try {
-      const body = await response.json();
+      const body = JSON.parse(text);
       detail = body.detail ?? JSON.stringify(body);
     } catch {
-      detail = await response.text();
+      // Proxy errors may be HTML or plain text; the body is already read.
+      if (response.status === 413) {
+        detail = 'The upload is too large. Try a smaller file.';
+      }
     }
     throw new Error(`${response.status}: ${detail}`);
   }
