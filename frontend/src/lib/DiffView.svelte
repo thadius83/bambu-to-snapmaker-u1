@@ -7,9 +7,10 @@
     jobId: string;
     downloadName: string;
     onreset: () => void;
+    ondownload?: () => void;
   }
 
-  let { diff, jobId, downloadName, onreset }: Props = $props();
+  let { diff, jobId, downloadName, onreset, ondownload }: Props = $props();
 
   let expanded = $state<Set<number>>(new Set());
 
@@ -49,6 +50,7 @@
         href={downloadUrl(jobId)}
         download={downloadName}
         class="download-btn"
+        onclick={ondownload}
       >
         Download .3mf
       </a>
@@ -262,7 +264,7 @@
   {/if}
 
   <div class="download-footer">
-    <a href={downloadUrl(jobId)} download={downloadName} class="download-btn large">
+    <a href={downloadUrl(jobId)} download={downloadName} class="download-btn large" onclick={ondownload}>
       Download {downloadName}
     </a>
     <p class="subtle">File expires in ~5 minutes — download now or convert again.</p>

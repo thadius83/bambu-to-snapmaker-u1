@@ -18,7 +18,5 @@ overrides:
   outer_wall_acceleration: 2000
   inner_wall_acceleration: 3000
   initial_layer_acceleration: 500
-  nozzle_temperature_initial_layer: ['260', '260', '260', '260']
-  nozzle_temperature: ['260', '260', '260', '260']
 priority: 11
 enabled: true

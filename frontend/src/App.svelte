@@ -9,6 +9,11 @@
   import Help from './lib/Help.svelte';
   import { listProfiles, suggestProfile, convert, type ProfileDescriptor, type ConvertResult } from './lib/api';
   import ToolheadAssign from './lib/ToolheadAssign.svelte';
+  import VoteBanner from './lib/VoteBanner.svelte';
+  import VoteToast from './lib/VoteToast.svelte';
+  import { canShowVotePrompt } from './lib/vote';
+
+  let showVoteToast = $state(false);
 
   // ---- routing (hash-based, zero deps) ------------------------------------
   type Route = 'convert' | 'blconvert' | 'rules' | 'help';
@@ -321,9 +326,12 @@
           jobId={result.job_id}
           downloadName={result.download_name}
           onreset={reset}
+          ondownload={() => { if (canShowVotePrompt()) showVoteToast = true; }}
         />
 
       {:else}
+        <VoteBanner />
+
         <div class="page-header tight">
           <h1>Convert Bambu → U1</h1>
           <p class="muted">
@@ -513,6 +521,10 @@
 </div>
 
 <Feedback currentPage={route} />
+
+{#if showVoteToast}
+  <VoteToast onclose={() => (showVoteToast = false)} />
+{/if}
 
 {#if phase === 'converting'}
   <div class="convert-overlay" role="status" aria-live="polite">

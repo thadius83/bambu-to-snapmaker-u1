@@ -240,6 +240,21 @@ def convert(
     for k, v in reference_cfg.items():
         merged.setdefault(k, v)
 
+    # U1 toolheads need the target's multi-extruder and standby cooling policy.
+    # Bambu single-nozzle settings otherwise leave parked heads at print temperature.
+    if not preserve_bambu_metadata:
+        for key in (
+            "single_extruder_multi_material",
+            "ooze_prevention",
+            "standby_temperature_delta",
+        ):
+            if key in reference_cfg:
+                old = merged.get(key)
+                new = reference_cfg[key]
+                if old != new:
+                    merged[key] = new
+                    diff.record_identity_swap(key, old, new)
+
     # Snapmaker Orca has a bug with rib prime towers; force rectangle (normal)
     # tower mode in U1 output regardless of source.  Bambu uses different keys
     # (prime_tower_fillet_wall / prime_tower_rib_wall) that are stripped by the
@@ -259,6 +274,43 @@ def convert(
     if "inherits_group" in merged:
         n = len(merged["inherits_group"]) if isinstance(merged["inherits_group"], list) else 0
         merged["inherits_group"] = [""] * n
+
+    # Bed geometry belongs to the target printer, never the source. Bambu files
+    # embed an absolute path to the source machine's plate STL (e.g. an H2D's
+    # "C:/Program Files/Bambu Studio/.../bbl-3dp-H2D.stl"), which Snapmaker Orca
+    # loads and draws as a second plate offset from the real U1 bed. It also
+    # leaks a filesystem path from the original author's machine into every
+    # output. Take the reference's value so the Bambu-to-Bambu path gets the
+    # target printer's plate rather than the source's.
+    for _bed_key in ("bed_custom_model", "bed_custom_texture"):
+        if _bed_key in merged:
+            merged[_bed_key] = reference_cfg.get(_bed_key, "")
+
+    # Multi-variant Bambu sources (H2D/H2C/X2D) store every per-filament array
+    # once per extruder variant: [slot0_v0, slot0_v1, .., slot1_v0, ..]. The U1
+    # has one variant per toolhead and reads these positionally, so slot 2 gets
+    # slot 1's values, slot 3 gets slot 2's, and so on — PLA beside PETG ends
+    # up running the PETG temperature.
+    #
+    # Stride is read from the file rather than a printer-model list: variant
+    # count differs by machine AND by Bambu Studio version (the same H2D is 2
+    # on 02.06 and 3 on newer). Single-variant sources give stride 1, so A1 /
+    # X1C / P1S files are untouched. Variant 0 is Direct Drive Standard: High
+    # Flow settings are deliberately not carried over, since most U1 users do
+    # not have a High Flow nozzle and can set it manually if they do.
+    if not preserve_bambu_metadata:
+        _n_src = len(source_cfg.get("filament_settings_id") or [])
+        _variants = source_cfg.get("filament_extruder_variant") or []
+        _stride = len(_variants) // _n_src if _n_src and _variants else 1
+        if _stride > 1:
+            _destrided = 0
+            for _k, _v in source_cfg.items():
+                if (_is_per_filament_key(_k) and isinstance(_v, list)
+                        and len(_v) == _n_src * _stride and merged.get(_k) == _v):
+                    merged[_k] = _v[::_stride]
+                    _destrided += 1
+            log.info("STAGE  de-stride: %d variants -> 1 (%d arrays collapsed)",
+                     _stride, _destrided)
 
     # 5b. collapse per-extruder lists → scalars where reference uses a scalar.
     # Bambu stores many settings as [val_ext1, val_ext2, ...]; U1 Orca expects
@@ -457,7 +509,8 @@ def convert(
                 colours = merged.get("filament_colour") or []
                 pause_cmd = merged.get("machine_pause_gcode", "M600")
                 modified_xml, swap_instrs = insert_swap_pauses(
-                    raw_xml, remap, colours, pause_cmd
+                    raw_xml, remap, colours, pause_cmd,
+                    layer_height=_first_float(merged.get("layer_height")),
                 )
                 if swap_instrs:
                     # Swap insertion adds new type=1 pause markers but must not
@@ -552,6 +605,16 @@ def _collapse_extruder_lists(
     return out
 
 
+def _first_float(value: Any) -> float | None:
+    """A setting as a float (first element if it is a list), or None."""
+    if isinstance(value, list):
+        value = value[0] if value else None
+    try:
+        return float(str(value))
+    except (TypeError, ValueError):
+        return None
+
+
 def _map_filaments_to_reference(
     merged: dict[str, Any],
     source_cfg: dict[str, Any],
@@ -620,6 +683,42 @@ def _map_filaments_to_reference(
     merged["filament_nozzle_map"] = new_nmap
 
 
+# Orca stores one value per filament slot for every filament_* key, and also
+# for these, which carry no prefix. A slot remap has to move all of them or the
+# output pairs one filament's colour with another filament's temperatures.
+# Derived from the bundled reference profiles; tests/test_slot_remap.py fails
+# if a profile gains one that is missing here.
+_UNPREFIXED_PER_FILAMENT_KEYS: frozenset[str] = frozenset({
+    "activate_air_filtration", "activate_chamber_temp_control",
+    "adaptive_pressure_advance", "adaptive_pressure_advance_bridges",
+    "adaptive_pressure_advance_model", "adaptive_pressure_advance_overhangs",
+    "additional_cooling_fan_speed", "chamber_temperature",
+    "close_fan_the_first_x_layers", "complete_print_exhaust_fan_speed",
+    "cool_plate_temp", "cool_plate_temp_initial_layer", "default_filament_colour",
+    "dont_slow_down_outer_wall", "during_print_exhaust_fan_speed",
+    "enable_overhang_bridge_fan", "enable_pressure_advance",
+    "eng_plate_temp", "eng_plate_temp_initial_layer", "fan_cooling_layer_time",
+    "fan_max_speed", "fan_min_speed", "full_fan_speed_layer",
+    "graphic_effect_plate_temp", "graphic_effect_plate_temp_initial_layer",
+    "hot_plate_temp", "hot_plate_temp_initial_layer", "idle_temperature",
+    "internal_bridge_fan_speed", "ironing_fan_speed",
+    "nozzle_temperature", "nozzle_temperature_initial_layer",
+    "nozzle_temperature_range_high", "nozzle_temperature_range_low",
+    "overhang_fan_speed", "overhang_fan_threshold", "pellet_flow_coefficient",
+    "pressure_advance", "reduce_fan_stop_start_freq", "required_nozzle_HRC",
+    "slow_down_for_layer_cooling", "slow_down_layer_time", "slow_down_min_speed",
+    "supertack_plate_temp", "supertack_plate_temp_initial_layer",
+    "support_material_interface_fan_speed", "temperature_vitrification",
+    "textured_cool_plate_temp", "textured_cool_plate_temp_initial_layer",
+    "textured_plate_temp", "textured_plate_temp_initial_layer",
+})
+
+
+def _is_per_filament_key(key: str) -> bool:
+    """True for keys Orca stores once per filament slot."""
+    return key.startswith("filament_") or key in _UNPREFIXED_PER_FILAMENT_KEYS
+
+
 def _normalise_filament_arrays(
     merged: dict[str, Any],
     source_cfg: dict[str, Any],
@@ -657,9 +756,9 @@ def _normalise_filament_arrays(
             )]
         )
 
-    # Reorder every filament_* list according to the remap.
+    # Reorder every per-filament list according to the remap.
     for key, value in list(merged.items()):
-        if not (key.startswith("filament_") and isinstance(value, list)):
+        if not (_is_per_filament_key(key) and isinstance(value, list)):
             continue
         if not value:
             continue

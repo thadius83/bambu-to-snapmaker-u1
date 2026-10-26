@@ -150,7 +150,8 @@ def clamp_numeric_ceilings(
     For each key in ``clamp_keys`` that exists in both dicts and parses as a
     number (scalar or list of scalars), enforce reference-value as an upper
     bound. Values above the ceiling are lowered; values at or below are left
-    alone. Lists are clamped element-wise (one ClampEvent per affected index).
+    alone. A reference value of 0 or less means "auto", not a limit, and is
+    skipped. Lists are clamped element-wise (one ClampEvent per affected index).
 
     Returns ``(new_settings, events)`` without mutating the input.
     """
@@ -174,7 +175,7 @@ def clamp_numeric_ceilings(
                 ref_elem = ref_val[i] if i < len(ref_val) else ref_val[-1]
                 ceiling = _to_float(ref_elem)
                 current = _to_float(element)
-                if ceiling is None or current is None:
+                if ceiling is None or current is None or ceiling <= 0:
                     continue
                 if current > ceiling:
                     new_element = _preserve_type(element, ceiling)
@@ -209,7 +210,7 @@ def clamp_numeric_ceilings(
                 )
             )
             out[key] = new_val
-        elif current > ceiling:
+        elif ceiling > 0 and current > ceiling:
             new_val = _preserve_type(cur_val, ceiling)
             events.append(
                 ClampEvent(

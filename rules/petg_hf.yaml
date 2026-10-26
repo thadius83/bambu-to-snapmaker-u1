@@ -19,9 +19,5 @@ overrides:
   outer_wall_acceleration: 3000
   inner_wall_acceleration: 4000
   initial_layer_acceleration: 500
-  nozzle_temperature_initial_layer: ['255', '255', '255', '255']
-  nozzle_temperature: ['255', '255', '255', '255']
-  hot_plate_temp: 70
-  hot_plate_temp_initial_layer: 70
 priority: 10
 enabled: true

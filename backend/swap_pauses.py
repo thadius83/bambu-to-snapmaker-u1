@@ -19,11 +19,38 @@ Algorithm
 """
 from __future__ import annotations
 
+import logging
 from xml.etree import ElementTree as ET
 
 from models import SwapInstruction
 
 _N_PHYSICAL = 4
+_FALLBACK_LAYER_HEIGHT = 0.2
+
+log = logging.getLogger(__name__)
+
+
+def _layer_height_for(layers: list[ET.Element], layer_height: float | None) -> float:
+    """The print's real layer height, or an estimate from colour-change spacing.
+
+    The estimate is an upper bound only: colour-change entries are sparse, so
+    it can be many layers too large.
+    """
+    if layer_height is not None and layer_height > 0:
+        return layer_height
+    zs = sorted({float(l.get("top_z", 0)) for l in layers if l.get("top_z")})
+    guess = min((b - a for a, b in zip(zs, zs[1:]) if b > a), default=_FALLBACK_LAYER_HEIGHT)
+    log.warning("swap-pauses: no layer height supplied; estimated %.3f mm from "
+                "colour-change spacing (may place pauses too low)", guess)
+    return guess
+
+
+def _pause_height(first_z: float, prev_z: float | None, layer_height: float) -> float:
+    """One layer below the colour it serves, never below the entry before it."""
+    z = round(max(layer_height, first_z - layer_height), 4)
+    if prev_z is not None and z < round(prev_z, 4) < first_z:
+        z = prev_z + (first_z - prev_z) / 2
+    return round(z, 4)
 
 
 def detect_conflicts(
@@ -46,6 +73,7 @@ def insert_swap_pauses(
     filament_colours: list[str],
     pause_gcode: str,
     n_physical: int = _N_PHYSICAL,
+    layer_height: float | None = None,
 ) -> tuple[str, list[SwapInstruction]]:
     """Rewrite XML inserting batched M600 pauses at optimal Z heights.
 
@@ -80,9 +108,7 @@ def insert_swap_pauses(
     for plate in root.iter("plate"):
         layers = [c for c in plate if c.tag == "layer"]
 
-        # Derive layer height from the smallest gap between consecutive top_z values.
-        zs = sorted({float(l.get("top_z", 0)) for l in layers if l.get("top_z")})
-        layer_height = min((b - a for a, b in zip(zs, zs[1:]) if b > a), default=0.2)
+        plate_lh = _layer_height_for(layers, layer_height)
 
         # --- Pass 1: collect swap events with last-use context ---------------
         SwapDetail = dict
@@ -148,7 +174,8 @@ def insert_swap_pauses(
             min_first = min(s["first_needed_idx"] for s in batch)
             first_needed = layers[min_first]
             first_z = float(first_needed.get("top_z", "0"))
-            pause_z = f"{max(layer_height, first_z - layer_height):g}"
+            prev_z = float(layers[min_first - 1].get("top_z", "0")) if min_first else None
+            pause_z = f"{_pause_height(first_z, prev_z, plate_lh):g}"
             after_idx = all_children.index(first_needed)
 
             to_insert.append((after_idx, pause_z, batch))
