@@ -1,7 +1,7 @@
 fastapi==0.136.1
 uvicorn[standard]==0.47.0
 python-multipart==0.0.32
-pydantic==2.9.2
+pydantic==2.14.1
 pyyaml==6.0.2
 opentelemetry-sdk>=1.42.0
 opentelemetry-exporter-otlp-proto-http>=1.42.0
