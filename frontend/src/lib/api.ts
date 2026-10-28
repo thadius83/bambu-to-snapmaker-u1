@@ -4,7 +4,6 @@
 export interface ProfileDescriptor {
   id: string;
   display_name: string;
-  path: string;
   source: 'bundled' | 'user';
   layer_height: string | null;
   printer_variant: string | null;
@@ -18,7 +17,6 @@ export interface RuleSummary {
   priority: number;
   match: Record<string, unknown>;
   overrides: Record<string, unknown>;
-  source_path: string | null;
 }
 
 export interface DiffSection {
@@ -98,32 +96,6 @@ export async function listRules(): Promise<RuleSummary[]> {
 
 export async function getRuleYaml(name: string): Promise<{ name: string; yaml_text: string }> {
   return handle(await fetch(`/api/rules/${encodeURIComponent(name)}`));
-}
-
-export async function putRule(name: string, yamlText: string): Promise<unknown> {
-  return handle(
-    await fetch(`/api/rules/${encodeURIComponent(name)}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ yaml_text: yamlText }),
-    }),
-  );
-}
-
-export async function createRule(yamlText: string): Promise<{ name: string }> {
-  return handle(
-    await fetch('/api/rules', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ yaml_text: yamlText }),
-    }),
-  );
-}
-
-export async function deleteRule(name: string): Promise<unknown> {
-  return handle(
-    await fetch(`/api/rules/${encodeURIComponent(name)}`, { method: 'DELETE' }),
-  );
 }
 
 export async function testMatch(file: File): Promise<unknown> {

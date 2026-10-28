@@ -14,7 +14,7 @@ services:
       - ./profiles:/app/profiles
       # User-supplied reference profiles shadow the bundled ones.
       - ./user_profiles:/app/user_profiles
-      # YAML filament-tuning rules — editable from the web UI or directly.
+      # YAML filament-tuning rules — maintain these files directly.
       - ./rules:/app/rules
       # Bambu target reference profiles (drop additional Bambu .3mf reference
       # profiles here to enable the Bambu→Bambu alpha flow).
@@ -26,7 +26,7 @@ services:
       # Feedback submissions — persisted on host.
       - ./feedback:/app/feedback
     environment:
-      MAX_UPLOAD_MB: "${MAX_UPLOAD_MB:-200}"
+      MAX_UPLOAD_MB: "${MAX_UPLOAD_MB:-300}"
       CLEANUP_TEMP_AFTER_SECONDS: "${CLEANUP_TEMP_AFTER_SECONDS:-300}"
       RETAIN_FAILED_FILES: "${RETAIN_FAILED_FILES:-false}"
       OTEL_ENABLED: "${OTEL_ENABLED:-false}"

@@ -240,9 +240,9 @@
         U1 Converter
       </button>
       <div class="wordmark-tooltip" role="tooltip">
-        Convert a Bambu Studio <code>.3mf</code> project file for use with the
+        Convert a <code>.3mf</code> project file for use with the
         <strong>Snapmaker U1</strong>. Upload, pick a quality profile, download —
-        then re-slice in Snapmaker Orca. No manual edits needed.
+        then review and re-slice in Snapmaker Orca.
       </div>
     </div>
 
@@ -252,7 +252,7 @@
         class:active={route === 'convert'}
         onclick={() => navigate('convert')}
       >
-        <span class="nav-label-full">Bambu Labs → Snapmaker U1</span>
+        <span class="nav-label-full">Snapmaker U1 Converter</span>
         <span class="nav-label-short">Convert</span>
 
       </button>
@@ -314,6 +314,7 @@
         <p class="muted">
           YAML rules that match on filament type / vendor / profile name and apply
           per-key speed, accel, and temperature overrides during conversion.
+          These shared rules are read-only on this website.
         </p>
       </div>
       <RuleEditor />
@@ -333,10 +334,9 @@
         <VoteBanner />
 
         <div class="page-header tight">
-          <h1>Convert Bambu → U1</h1>
+          <h1>Snapmaker U1 3MF Converter</h1>
           <p class="muted">
-            Drop a Bambu Studio .3mf. We swap the printer identity, G-code,
-            and drop incompatible keys. Re-slice in Snapmaker Orca.
+            Convert MakerWorld and Bambu Studio projects, plus OrcaSlicer, PrusaSlicer and Cura 3MF files.
           </p>
         </div>
 
@@ -389,7 +389,7 @@
 
             {#if sourceSlicer}
               <div class="warn-banner" role="alert">
-                <strong>Experimental — non-Bambu file:</strong> source detected as <em>{sourceSlicer}</em>. Profile auto-selected from layer height. Re-slice in Snapmaker Orca before printing and verify all settings.
+                <strong>Source detected:</strong> <em>{sourceSlicer}</em>. Profile auto-selected from layer height. Re-slice in Snapmaker Orca before printing and verify all settings.
               </div>
             {/if}
 
@@ -455,7 +455,7 @@
         <div class="how-it-works-bar">
           <div class="hiw-step">
             <div class="hiw-num">1</div>
-            <div class="hiw-body"><div class="hiw-label">Upload</div><div class="hiw-desc">Drop your Bambu Studio <code>.3mf</code> project file</div></div>
+            <div class="hiw-body"><div class="hiw-label">Upload</div><div class="hiw-desc">Drop your <code>.3mf</code> project file</div></div>
           </div>
           <div class="hiw-arrow">→</div>
           <div class="hiw-step">
@@ -470,7 +470,7 @@
           <div class="hiw-arrow">→</div>
           <div class="hiw-step">
             <div class="hiw-num">4</div>
-            <div class="hiw-body"><div class="hiw-label">Download & re-slice</div><div class="hiw-desc">Open in Snapmaker Orca — no manual edits needed</div></div>
+            <div class="hiw-body"><div class="hiw-label">Download & re-slice</div><div class="hiw-desc">Review settings and re-slice in Snapmaker Orca</div></div>
           </div>
         </div>
       {/if}
@@ -479,7 +479,7 @@
 
   <footer>
     <div class="footer-links">
-      <span class="subtle">Bambu → Snapmaker U1 3mf Converter</span>
+      <span class="subtle">Snapmaker U1 3MF Converter</span>
       <span class="subtle">·</span>
       <a href="#help" onclick={() => navigate('help')}>Help</a>
       <span class="subtle">·</span>
@@ -487,8 +487,6 @@
     </div>
     <div class="footer-links">
       <span class="subtle">Also by the author:</span>
-      <a href="https://gridforge.jd.au" target="_blank" rel="noopener noreferrer">GridForge</a>
-      <span class="subtle">·</span>
       <a href="https://iprintstuff.com.au" target="_blank" rel="noopener noreferrer">iPrintStuff</a>
       <span class="subtle">·</span>
       <a href="https://jd.au" target="_blank" rel="noopener noreferrer">jd.au</a>

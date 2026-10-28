@@ -7,8 +7,10 @@ User profiles in /app/user_profiles take precedence over bundled profiles in
 from __future__ import annotations
 
 import json
+import lzma
 import re
 import zipfile
+import zlib
 from pathlib import Path
 
 from models import ProfileDescriptor
@@ -18,6 +20,15 @@ MODEL_SETTINGS = "Metadata/model_settings.config"
 MODEL_3D = "3D/3dmodel.model"
 
 _PLATE_GCODE_RE = re.compile(r"^Metadata/plate_\d+\.gcode$")
+# These members are read by exact name or synthesized by the output writer.
+# A lone alias must not be copied alongside a newly generated canonical member.
+_CANONICAL_MEMBERS = {
+    name.casefold(): name for name in (
+        PROJECT_SETTINGS, MODEL_SETTINGS, MODEL_3D,
+        "Metadata/plate_1.json", "Metadata/slice_info.config",
+    )
+}
+_ZIP_ERRORS = (zipfile.BadZipFile, EOFError, NotImplementedError, zlib.error, lzma.LZMAError)
 
 
 class ProfileNotFoundError(Exception):
@@ -26,6 +37,57 @@ class ProfileNotFoundError(Exception):
 
 class ProfileLoadError(Exception):
     pass
+
+
+def _validate_archive_members(zf: zipfile.ZipFile) -> None:
+    """Reject ambiguous names before any archive member is interpreted.
+
+    Output packages travel between case-sensitive and case-insensitive systems.
+    Use portable keys for collision detection, but never silently rename members.
+    """
+    seen: set[str] = set()
+    for member in zf.infolist():
+        name = member.filename
+        portable = name.replace("\\", "/")
+        parts = [part for part in portable.split("/") if part not in ("", ".")]
+        if (
+            not parts or portable.startswith("/") or ".." in parts
+            or re.match(r"^[A-Za-z]:", parts[0])
+            or "\x00" in member.orig_filename
+        ):
+            raise ProfileLoadError("archive contains an unsafe member path")
+        key = "/".join(parts).casefold()
+        if key in seen:
+            raise ProfileLoadError("archive contains duplicate member names")
+        seen.add(key)
+        canonical = _CANONICAL_MEMBERS.get(key)
+        if canonical is not None and name != canonical:
+            raise ProfileLoadError("archive contains a noncanonical reserved member name")
+        if member.flag_bits & 1:
+            raise ProfileLoadError("encrypted archive members are not supported")
+
+
+def _decode_project_settings(raw: bytes, filename: str) -> dict:
+    try:
+        settings = json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as err:
+        raise ProfileLoadError(
+            f"{filename} has malformed project_settings.config"
+        ) from err
+    if not isinstance(settings, dict):
+        raise ProfileLoadError(f"{filename} project_settings.config must be a JSON object")
+    return settings
+
+
+def _read_archive_member(zf: zipfile.ZipFile, name: str) -> bytes:
+    try:
+        return zf.read(name)
+    except OSError as err:
+        # bz2 reports malformed streams as OSError without errno. Preserve
+        # filesystem errors, including any failure while opening the archive.
+        if zf.getinfo(name).compress_type != zipfile.ZIP_BZIP2 or err.errno is not None:
+            raise
+        raise ProfileLoadError("archive contains corrupt BZIP2 data") from err
 
 
 def _profile_id_from_name(path: Path) -> str:
@@ -42,18 +104,16 @@ def read_project_settings(profile_path: Path) -> dict:
         raise ProfileNotFoundError(str(profile_path))
     try:
         with zipfile.ZipFile(profile_path, "r") as zf:
+            _validate_archive_members(zf)
             if PROJECT_SETTINGS not in zf.namelist():
                 raise ProfileLoadError(
                     f"{profile_path.name} is missing {PROJECT_SETTINGS}"
                 )
-            raw = zf.read(PROJECT_SETTINGS).decode("utf-8")
-            return json.loads(raw)
-    except zipfile.BadZipFile as err:
+            return _decode_project_settings(_read_archive_member(zf, PROJECT_SETTINGS), profile_path.name)
+    except _ZIP_ERRORS as err:
         raise ProfileLoadError(f"{profile_path.name} is not a valid zip") from err
-    except json.JSONDecodeError as err:
-        raise ProfileLoadError(
-            f"{profile_path.name} has malformed project_settings.config"
-        ) from err
+    except UnicodeDecodeError as err:
+        raise ProfileLoadError(f"{profile_path.name} has invalid archive text encoding") from err
 
 
 def read_source_settings(source_path: Path) -> tuple[dict, str | None]:
@@ -68,20 +128,15 @@ def read_source_settings(source_path: Path) -> tuple[dict, str | None]:
     """
     try:
         with zipfile.ZipFile(source_path, "r") as zf:
+            _validate_archive_members(zf)
             names = zf.namelist()
             _reject_sliced_gcode_without_geometry(source_path.name, zf, names)
 
             if PROJECT_SETTINGS in names:
-                raw = zf.read(PROJECT_SETTINGS).decode("utf-8")
-                try:
-                    return json.loads(raw), None
-                except json.JSONDecodeError as err:
-                    raise ProfileLoadError(
-                        f"{source_path.name} has malformed project_settings.config"
-                    ) from err
+                return _decode_project_settings(_read_archive_member(zf, PROJECT_SETTINGS), source_path.name), None
 
             if "Metadata/Slic3r_PE.config" in names:
-                raw = zf.read("Metadata/Slic3r_PE.config").decode("utf-8")
+                raw = _read_archive_member(zf, "Metadata/Slic3r_PE.config").decode("utf-8")
                 cfg: dict = {}
                 m = re.search(r"^; layer_height = ([0-9.]+)$", raw, re.MULTILINE)
                 if m:
@@ -120,7 +175,7 @@ def read_source_settings(source_path: Path) -> tuple[dict, str | None]:
             if cura_cfgs:
                 lh = None
                 for cura_cfg in cura_cfgs:
-                    raw = zf.read(cura_cfg).decode("utf-8")
+                    raw = _read_archive_member(zf, cura_cfg).decode("utf-8")
                     m = re.search(r"^layer_height\s*=\s*([0-9.]+)$", raw, re.MULTILINE)
                     if m:
                         lh = m.group(1).strip()
@@ -130,8 +185,10 @@ def read_source_settings(source_path: Path) -> tuple[dict, str | None]:
             if "3D/3dmodel.model" in names:
                 return {}, "Unknown"
 
-    except zipfile.BadZipFile as err:
+    except _ZIP_ERRORS as err:
         raise ProfileLoadError(f"{source_path.name} is not a valid zip") from err
+    except UnicodeDecodeError as err:
+        raise ProfileLoadError(f"{source_path.name} has invalid archive text encoding") from err
 
     raise ProfileLoadError(f"{source_path.name}: unrecognised 3mf format")
 
@@ -152,7 +209,7 @@ def _reject_sliced_gcode_without_geometry(
         return
 
     model_xml = (
-        zf.read(MODEL_3D).decode("utf-8", errors="replace")
+        _read_archive_member(zf, MODEL_3D).decode("utf-8", errors="replace")
         if MODEL_3D in names else ""
     )
     has_model_geometry = bool(
@@ -177,7 +234,7 @@ def read_model_settings(profile_path: Path) -> str | None:
     with zipfile.ZipFile(profile_path, "r") as zf:
         if MODEL_SETTINGS not in zf.namelist():
             return None
-        return zf.read(MODEL_SETTINGS).decode("utf-8")
+        return _read_archive_member(zf, MODEL_SETTINGS).decode("utf-8")
 
 
 def _descriptor(path: Path, source: str) -> ProfileDescriptor:

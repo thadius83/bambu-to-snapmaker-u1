@@ -13,7 +13,7 @@
         <div class="step-num">1</div>
         <div class="step-body">
           <div class="step-label">Upload</div>
-          <div class="step-desc">Drop a Bambu Studio or compatible slicer <code>.3mf</code> project file</div>
+          <div class="step-desc">Drop your <code>.3mf</code> project file</div>
         </div>
       </div>
       <div class="step-arrow">→</div>
@@ -37,7 +37,7 @@
         <div class="step-num">4</div>
         <div class="step-body">
           <div class="step-label">Download & re-slice</div>
-          <div class="step-desc">Open in Snapmaker Orca and slice — no manual edits needed</div>
+          <div class="step-desc">Review settings and re-slice in Snapmaker Orca</div>
         </div>
       </div>
     </div>
@@ -45,11 +45,11 @@
 
   <!-- Supported printers -->
   <section class="card card-padded">
-    <h2>U1 Convert <span class="badge beta">BETA</span></h2>
+    <h2>Snapmaker U1 3MF Converter <span class="badge beta">BETA</span></h2>
     <p>
-      Converts a Bambu Studio or compatible slicer <code>.3mf</code> project file for use with the
-      <strong>Snapmaker U1</strong>. Your print settings, speeds, and filament
-      configuration carry across — open the result in Snapmaker Orca and re-slice.
+      Convert MakerWorld and Bambu Studio projects, plus OrcaSlicer, PrusaSlicer and Cura
+      <code>.3mf</code> files for the <strong>Snapmaker U1</strong>.
+      Review the converted settings and re-slice in Snapmaker Orca before printing.
     </p>
     <h3>Supported source printers</h3>
     <table>
@@ -62,13 +62,13 @@
         <tr><td>Bambu Lab H2D</td><td><span class="badge ok">Tested</span></td></tr>
       </tbody>
     </table>
-    <h3>Experimental source formats</h3>
+    <h3>Additional source formats</h3>
     <table>
-      <thead><tr><th>Format</th><th>Status</th></tr></thead>
+      <thead><tr><th>Format</th></tr></thead>
       <tbody>
-        <tr><td>PrusaSlicer <code>.3mf</code>, including MMU painting</td><td><span class="badge expected">Experimental</span></td></tr>
-        <tr><td>Other Orca-based <code>.3mf</code> files</td><td><span class="badge expected">Experimental</span></td></tr>
-        <tr><td>Cura / basic geometry <code>.3mf</code> files</td><td><span class="badge expected">Experimental</span></td></tr>
+        <tr><td>PrusaSlicer <code>.3mf</code>, including MMU painting</td></tr>
+        <tr><td>OrcaSlicer and other Orca-based <code>.3mf</code> files</td></tr>
+        <tr><td>Cura / basic geometry <code>.3mf</code> files</td></tr>
       </tbody>
     </table>
   </section>
@@ -107,7 +107,7 @@
           Assign source colours to T1–T4, or skip to bring all colours through and let
           Snapmaker Orca handle assignment.
         </p>
-        <p class="tip">PrusaSlicer MMU face painting is experimental but converted into
+        <p class="tip">PrusaSlicer MMU face painting is converted into
         Snapmaker Orca paint data during import.</p>
       </div>
     </div>
@@ -119,23 +119,23 @@
     <div class="faq">
       <details>
         <summary>What file format does the converter accept?</summary>
-        <p>The converter accepts <code>.3mf</code> project files from Bambu Studio or any compatible slicer (OrcaSlicer, PrusaSlicer). Sliced <code>.gcode.3mf</code> files are not supported when they contain no editable model geometry — upload the original project <code>.3mf</code> instead.</p>
+        <p>The converter accepts <code>.3mf</code> project files from MakerWorld, Bambu Studio, OrcaSlicer, PrusaSlicer and Cura. Sliced <code>.gcode.3mf</code> files are not supported when they contain no editable model geometry — upload the original project <code>.3mf</code> instead.</p>
       </details>
       <details>
         <summary>Which Snapmaker models does it support?</summary>
-        <p>The converter outputs files for the Snapmaker U1 toolhead, compatible with the Snapmaker Artisan and J1/J1s. The converted file is re-sliced in Snapmaker Orca before printing.</p>
+        <p>The converter targets the Snapmaker U1 printer. Review the converted file and re-slice it in Snapmaker Orca before printing.</p>
       </details>
       <details>
-        <summary>Which Bambu printers are supported as a source?</summary>
-        <p>Tested: X1C, X1E, P1S, P1P, H2S, H2D, A1, and A1 Mini. PrusaSlicer (including MMU painting) and other OrcaSlicer-based formats are supported experimentally.</p>
+        <summary>Which Bambu Lab printers are supported as a source?</summary>
+        <p>Tested: X1C, X1E, P1S, P1P, H2S, H2D, A1, and A1 Mini.</p>
       </details>
       <details>
         <summary>Is it free to use?</summary>
-        <p>Yes — completely free, no account or sign-up required. Files are processed in memory and never stored.</p>
+        <p>Yes, the converter is completely free with no account or sign-up required.</p>
       </details>
       <details>
-        <summary>Do I need to re-slice after conversion?</summary>
-        <p>Yes. Open the converted <code>.3mf</code> in Snapmaker Orca and re-slice before printing. No manual edits are needed — G-code, filament data, and profile settings are all handled automatically.</p>
+        <summary>Do I need to re-slice the file after conversion?</summary>
+        <p>Yes. Open the converted <code>.3mf</code> in Snapmaker Orca, review the settings and re-slice before printing.</p>
       </details>
       <details>
         <summary>Can it handle more than 4 colours?</summary>
@@ -143,11 +143,11 @@
       </details>
       <details>
         <summary>What happens to my uploaded files?</summary>
-        <p>Files are processed in memory and removed shortly after conversion. Nothing is stored on disk and no account is required. See the <a href="/privacy.html">Privacy Policy</a> for details.</p>
+        <p>Files are temporarily stored for processing and download. See the <a href="/privacy.html">Privacy Policy</a> for details.</p>
       </details>
       <details>
         <summary>What is the maximum file size?</summary>
-        <p>200 MB.</p>
+        <p>300 MB.</p>
       </details>
     </div>
   </section>
@@ -157,8 +157,8 @@
     <h2>General</h2>
     <ul>
       <li>Download your file before leaving — files are removed shortly after conversion.</li>
-      <li>Maximum upload size: 200 MB.</li>
-      <li>Use <code>.3mf</code> project files where possible. Bambu Studio is the primary target; PrusaSlicer, Cura, and other Orca-style files are experimental.</li>
+      <li>Maximum upload size: 300 MB.</li>
+      <li>Upload a <code>.3mf</code> project file, then review the converted settings and re-slice in Snapmaker Orca before printing.</li>
       <li>Sliced <code>.gcode.3mf</code> files are not supported when they contain no editable model geometry. Upload the original project <code>.3mf</code> instead.</li>
     </ul>
     <h3>Something not working?</h3>
@@ -271,7 +271,6 @@
 
   .badge { display: inline-block; font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 999px; letter-spacing: 0.02em; vertical-align: middle; }
   .badge.ok { background: color-mix(in srgb, var(--success) 15%, transparent); color: var(--success); }
-  .badge.expected { background: color-mix(in srgb, var(--accent) 15%, transparent); color: var(--accent); }
   .badge.beta { background: color-mix(in srgb, var(--accent) 15%, transparent); color: var(--accent); }
 
   /* FAQ accordion */

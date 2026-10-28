@@ -1,29 +1,24 @@
-# Bambu → Snapmaker U1 3MF Converter
+# Snapmaker U1 3MF Converter
 
 [![BuyMeACoffee](.github/bmc-yellow.svg)](https://www.buymeacoffee.com/jdau)
 
-Self-hosted web app that converts Bambu Lab `.3mf` project files into
-Snapmaker U1-compatible `.3mf` files, with experimental support for compatible
-slicer project files from Orca-based slicers, PrusaSlicer, and Cura. The
-converted file opens cleanly in Snapmaker Orca ready for re-slicing — it
-preserves the creator's process settings (layer height, walls, infill, speeds,
-filaments, colours, etc.) while swapping printer identity, custom G-code, and
-filament slot assignments.
-
-If you've ever downloaded a Makerworld project and discovered it's locked to a
-Bambu printer, this is the tool for you. Drop the `.3mf` in, get a U1-ready
-`.3mf` out. No manual JSON editing, no profile rebuilding.
+Self-hosted web app that converts MakerWorld and Bambu Studio projects, plus
+OrcaSlicer, PrusaSlicer and Cura 3MF files, for the Snapmaker U1 printer.
+The converter adapts available source settings to a selected U1 reference
+profile, including printer identity, custom G-code and filament assignments.
+Download the converted file, then review and re-slice it in Snapmaker Orca
+before printing.
 
 ## Source file support
 
-| Source format | Status | Notes |
-|---|---|---|
-| Bambu Studio / Bambu Lab `.3mf` | Primary target | Full conversion path. |
-| Orca-format non-Bambu `.3mf` | Experimental | Flashforge, Anycubic, Creality, and similar Orca-based exports use the same project structure and are converted best-effort. |
-| PrusaSlicer `.3mf` | Experimental | Reads `Slic3r_PE.config`; Prusa MMU face painting is translated to Snapmaker Orca paint data. |
-| Cura `.3mf` | Experimental | Reads Cura user config where available. |
-| Bare geometry `.3mf` | Experimental | No slicer settings are available, so the converter defaults to the bundled `0.20 Standard` U1 profile. |
-| Sliced `.gcode.3mf` without model geometry | Not supported | These files contain printer-specific plate G-code but no editable model data. Upload the original project `.3mf` instead. |
+| Source format | Notes |
+|---|---|
+| Bambu Studio / Bambu Lab `.3mf` | Includes projects downloaded from MakerWorld. |
+| Orca-format non-Bambu `.3mf` | Flashforge, Anycubic, Creality, and similar Orca-based exports use the same project structure. |
+| PrusaSlicer `.3mf` | Reads `Slic3r_PE.config`; Prusa MMU face painting is translated to Snapmaker Orca paint data. |
+| Cura `.3mf` | Reads Cura user config where available. |
+| Bare geometry `.3mf` | No slicer settings are available, so the converter defaults to the bundled `0.20 Standard` U1 profile. |
+| Sliced `.gcode.3mf` without model geometry | Not supported. These files contain printer-specific plate G-code but no editable model data. Upload the original project `.3mf` instead. |
 
 ## Hosted Version
 
@@ -57,8 +52,8 @@ No accounts, no database, no external dependencies beyond Docker.
    ceilings. The reference itself is the source of truth — no hard-coded
    numbers.
 5. **Filament rules** — YAML-based matching on filament name / vendor / type.
-   Applies per-key overrides (speed, accel, temperature). Editable in the
-   browser without a restart.
+   Applies per-key overrides (speed, accel, temperature). Maintain the YAML
+   files directly; view rules and test matching in the browser.
 6. **Filament slot remap** — preserves source colour array order exactly
    (slot N stays at slot N). Painted-face colour assignments are preserved via
    mesh paint data (`paint_color`) where the source format provides it.
@@ -80,7 +75,7 @@ The diff view after conversion shows every change made before you download.
 | Mount | Purpose |
 |---|---|
 | `./user_profiles` | Extra U1 reference `.3mf` files. Any file here with the same name as a bundled profile shadows it. |
-| `./rules` | YAML filament-tuning rules. Editable live via the Rules page in the UI. |
+| `./rules` | YAML filament-tuning rules. Maintain these files directly; the Rules page is read-only. |
 | `./tmp` | Converted files retained for 5 minutes after the conversion completes. |
 
 ## Adding reference profiles
@@ -106,9 +101,10 @@ Bundled profiles in `./profiles/` cover the full U1 layer-height range:
 
 ## Writing filament rules
 
-Rules live as individual YAML files in `./rules/`. You can edit them in the
-browser (Rules page) or directly on the filesystem. Changes are picked up on
-the next conversion — no restart needed.
+Rules live as individual YAML files in `./rules/`. Maintain these files directly
+on the filesystem. Changes are picked up on the next conversion — no restart
+needed. The Rules page lets you view the shared rules and test matching against
+a `.3mf` file.
 
 ### Schema
 
@@ -144,8 +140,8 @@ Per-object scoping is a planned extension.
 | `pla.yaml` | Generic Bambu PLA Basic — balanced U1 speeds |
 | `pla_matte.yaml` | Bambu PLA Matte — slightly reduced speeds |
 
-Values are based on Bambu's published tuning guidance; adjust to your spool
-via the web editor.
+Values are based on Bambu's published tuning guidance; adjust the YAML files
+to suit your spool.
 
 ## Configuration
 
@@ -154,7 +150,7 @@ common knobs:
 
 | Variable | Default | Description |
 |---|---|---|
-| `MAX_UPLOAD_MB` | `200` | Upload size cap |
+| `MAX_UPLOAD_MB` | `300` | Upload size cap |
 | `CLEANUP_TEMP_AFTER_SECONDS` | `300` | How long converted files stay available for download before being purged |
 | `RETAIN_FAILED_FILES` | `false` | Keep failed conversion workdirs in `tmp_failed/` for debugging |
 | `VITE_SITE_URL` | `http://localhost:8083` | Canonical URL baked into the frontend (SEO meta + privacy page) |
@@ -209,7 +205,7 @@ frontend/src/
   lib/Upload.svelte Drag-drop zone
   lib/Settings.svelte  Profile dropdown, toggles, advanced overrides
   lib/DiffView.svelte  Post-conversion change summary + swap guide
-  lib/RuleEditor.svelte  Rule list + CodeMirror YAML editor + test-match
+  lib/RuleEditor.svelte  Rule list + read-only YAML view + test-match
   lib/api.ts        Typed fetch wrappers for every API endpoint
 
 profiles/           Bundled U1 reference 3mf files (committed)
@@ -220,9 +216,9 @@ tmp/                Per-request working dirs, auto-cleaned
 
 ## Need a sample input?
 
-Grab a Bambu Studio `.3mf` from [Makerworld](https://makerworld.com/) or your
-own slicer history. Compatible Orca-based, PrusaSlicer, Cura, and basic
-geometry `.3mf` files can also be tried, but they are experimental.
+Grab a Bambu Studio `.3mf` from [MakerWorld](https://makerworld.com/) or your
+own slicer history. You can also upload OrcaSlicer, PrusaSlicer, Cura, and
+basic geometry `.3mf` files.
 
 Painted multi-colour models work — the converter preserves source colour slots
 and mesh paint data where available. For layer-based prints with more than 4
@@ -236,8 +232,7 @@ toolhead/manual swap handling before printing.
   `user_profiles/` to target a different printer (works mechanically; not
   fully tested).
 - No conversion history or re-download after the cleanup window.
-- No in-app slicing — output must be re-sliced in Snapmaker Orca.
-- Non-Bambu source support is experimental and should be reviewed carefully in
+- No in-app slicing — review the converted settings and re-slice in
   Snapmaker Orca before printing.
 - Sliced `.gcode.3mf` files without editable model geometry cannot be converted;
   upload the original project `.3mf`.

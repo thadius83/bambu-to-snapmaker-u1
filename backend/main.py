@@ -8,10 +8,7 @@ Endpoints:
   GET    /api/profiles             — list U1 reference profiles
   GET    /api/bambu-profiles       — list Bambu target profiles
   GET    /api/rules                — list YAML rules
-  POST   /api/rules                — create a new rule
   GET    /api/rules/{name}         — fetch one rule (raw YAML)
-  PUT    /api/rules/{name}         — update rule YAML
-  DELETE /api/rules/{name}         — delete rule
   POST   /api/rules/test-match     — upload a 3mf, return matching rules
 
 Static file serving for the built frontend lives at /.
@@ -43,12 +40,11 @@ from fastapi import (
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
 
 import telemetry
 from converter import convert, is_painted_model, _MULTIPLATE_SPAN_MM
 from diff_reporter import summarise
-from models import ConversionSettings, ProfileDescriptor, RuleDefinition
+from models import ConversionSettings
 from profile_loader import (
     ProfileLoadError,
     ProfileNotFoundError,
@@ -61,9 +57,7 @@ from profile_loader import (
 from rules_engine import (
     FilamentContext,
     RuleLoadError,
-    dump_rule,
     find_matches,
-    load_rule_file,
     load_rules,
 )
 from security import SECURITY_HEADERS, render_privacy_html
@@ -106,7 +100,7 @@ FRONTEND_DIST = Path(
     os.environ.get("U13MF_FRONTEND_DIST", APP_ROOT / "frontend" / "dist")
 )
 
-MAX_UPLOAD_MB = int(os.environ.get("MAX_UPLOAD_MB", "100"))
+MAX_UPLOAD_MB = int(os.environ.get("MAX_UPLOAD_MB", "300"))
 CLEANUP_AFTER_SECONDS = int(os.environ.get("CLEANUP_TEMP_AFTER_SECONDS", "300"))
 SITE_URL = "https://" + os.environ.get("DOMAINHOST", "u1convert.com").rstrip("/")
 FAILED_CLEANUP_AFTER_SECONDS = int(
@@ -235,7 +229,10 @@ threading.Thread(target=_cleanup_loop, daemon=True).start()
 # ---------------------------------------------------------------------------
 # app
 
-app = FastAPI(title="Bambu → Snapmaker U1 3mf Converter", version="0.1.0")
+app = FastAPI(
+    title="Snapmaker U1 3MF Converter", version="0.1.0",
+    docs_url=None, redoc_url=None, openapi_url=None,
+)
 
 if telemetry._otel_enabled():
     from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
@@ -282,9 +279,12 @@ def _rule_filename(name: str) -> Path:
 # profiles
 
 
-@app.get("/api/profiles", response_model=list[ProfileDescriptor])
-def api_list_profiles() -> list[ProfileDescriptor]:
-    return list_profiles(PROFILES_DIR, USER_PROFILES_DIR)
+@app.get("/api/profiles")
+def api_list_profiles() -> list[dict[str, Any]]:
+    return [
+        profile.model_dump(exclude={"path"})
+        for profile in list_profiles(PROFILES_DIR, USER_PROFILES_DIR)
+    ]
 
 
 @app.get("/api/bambu-profiles")
@@ -307,10 +307,6 @@ def api_list_bambu_profiles() -> list[dict[str, str]]:
 # rules
 
 
-class RulePayload(BaseModel):
-    yaml_text: str
-
-
 @app.get("/api/rules")
 def api_list_rules() -> list[dict[str, Any]]:
     try:
@@ -326,7 +322,6 @@ def api_list_rules() -> list[dict[str, Any]]:
             "priority": r.priority,
             "match": r.match.model_dump(exclude_none=True),
             "overrides": r.overrides,
-            "source_path": r.source_path,
         }
         for r in rules
     ]
@@ -340,51 +335,12 @@ def api_get_rule(name: str) -> dict[str, str]:
     return {"name": name, "yaml_text": path.read_text(encoding="utf-8")}
 
 
-@app.put("/api/rules/{name}")
-def api_put_rule(name: str, payload: RulePayload) -> dict[str, str]:
-    # Validate by parsing before writing.
-    try:
-        rule = _parse_rule_yaml(payload.yaml_text)
-    except RuleLoadError as err:
-        raise HTTPException(400, detail=str(err)) from err
-    if rule.name.strip() != name.strip():
-        raise HTTPException(
-            400, detail=f"yaml name {rule.name!r} doesn't match URL {name!r}"
-        )
-    path = _rule_filename(name)
-    path.write_text(payload.yaml_text, encoding="utf-8")
-    return {"status": "ok", "path": str(path)}
-
-
-@app.post("/api/rules")
-def api_create_rule(payload: RulePayload) -> dict[str, str]:
-    try:
-        rule = _parse_rule_yaml(payload.yaml_text)
-    except RuleLoadError as err:
-        raise HTTPException(400, detail=str(err)) from err
-    path = _rule_filename(rule.name)
-    if path.exists():
-        raise HTTPException(409, detail="rule with that name already exists")
-    path.write_text(payload.yaml_text, encoding="utf-8")
-    return {"status": "ok", "name": rule.name, "path": str(path)}
-
-
-@app.delete("/api/rules/{name}")
-def api_delete_rule(name: str) -> dict[str, str]:
-    path = _rule_filename(name)
-    if not path.exists():
-        raise HTTPException(404, detail="rule not found")
-    path.unlink()
-    return {"status": "deleted"}
-
-
 @app.post("/api/rules/test-match")
 async def api_test_match(file: UploadFile = File(...)) -> dict[str, Any]:
-    if not file.filename or not file.filename.lower().endswith(".3mf"):
-        raise HTTPException(400, detail="expected a .3mf upload")
+    _validate_upload_filename(file)
     with tempfile.TemporaryDirectory(dir=TMP_DIR) as td:
         src = Path(td) / file.filename
-        _save_upload(file, src)
+        _save_upload(file, src, size_limit_bytes=MAX_UPLOAD_MB * 1024 * 1024)
         from profile_loader import read_project_settings as _rps  # avoid cycle
 
         try:
@@ -413,34 +369,19 @@ async def api_test_match(file: UploadFile = File(...)) -> dict[str, Any]:
     }
 
 
-def _parse_rule_yaml(yaml_text: str) -> RuleDefinition:
-    try:
-        raw = yaml.safe_load(yaml_text)
-    except yaml.YAMLError as err:
-        raise RuleLoadError(f"invalid YAML: {err}") from err
-    if not isinstance(raw, dict):
-        raise RuleLoadError("top-level must be a mapping")
-    try:
-        return RuleDefinition(**raw)
-    except Exception as err:
-        raise RuleLoadError(str(err)) from err
-
-
 # ---------------------------------------------------------------------------
 # suggest-profile
 
 
 @app.post("/api/suggest-profile")
 async def api_suggest_profile(file: UploadFile = File(...)) -> dict[str, Any]:
-    if not file.filename or not file.filename.lower().endswith(".3mf"):
-        telemetry.upload_errors_counter.add(1, {"reason": "bad_extension"})
-        raise HTTPException(400, detail="expected a .3mf upload")
+    _validate_upload_filename(file)
     job_id = uuid.uuid4().hex
     workdir = TMP_DIR / job_id
     workdir.mkdir(parents=True)
     src = workdir / file.filename
-    _save_upload(file, src)
     try:
+        _save_upload(file, src, size_limit_bytes=MAX_UPLOAD_MB * 1024 * 1024)
         try:
             cfg, _detected_slicer = read_source_settings(src)
         except ProfileLoadError as err:
@@ -561,11 +502,10 @@ async def api_convert(
     slot_map: str = Form("{}"),
     insert_swap_pauses: str = Form("false"),
 ) -> JSONResponse:
-    if not file.filename or not file.filename.lower().endswith(".3mf"):
-        raise HTTPException(400, detail="expected a .3mf upload")
+    _validate_upload_filename(file)
 
     try:
-        overrides = yaml.safe_load(advanced_overrides) or {}
+        overrides = yaml.safe_load(advanced_overrides) if advanced_overrides.strip() else {}
         if not isinstance(overrides, dict):
             raise ValueError("must be a mapping")
     except (ValueError, yaml.YAMLError) as err:
@@ -611,19 +551,20 @@ async def api_convert(
     rules = load_rules(RULES_DIR)
 
     _src_kb = src_path.stat().st_size / 1024
-    with zipfile.ZipFile(src_path) as _zf:
-        _src_names = _zf.namelist()
-        _src_cfg = (
-            json.loads(_zf.read("Metadata/project_settings.config"))
-            if "Metadata/project_settings.config" in _src_names else {}
-        )
-        _n_filaments = len(_src_cfg.get("filament_settings_id") or [])
-        _src_printer = _src_cfg.get("printer_model", "unknown")
-    _is_painted = is_painted_model(_src_names, _n_filaments)
-    _has_vlh = "Metadata/layer_heights_profile.txt" in _src_names
-    _already_converted = bool(_src_printer and "U1" in _src_printer)
+    _is_painted = _has_vlh = _already_converted = False
+    _src_printer = "unknown"
     _t0 = time.monotonic()
     try:
+        # Validation and telemetry reads belong inside the same error boundary
+        # as conversion; malformed uploads must not bypass cleanup/HTTP 400.
+        _src_cfg, _ = read_source_settings(src_path)
+        with zipfile.ZipFile(src_path) as _zf:
+            _src_names = _zf.namelist()
+        _n_filaments = len(_src_cfg.get("filament_settings_id") or [])
+        _src_printer = _src_cfg.get("printer_model", "unknown")
+        _is_painted = is_painted_model(_src_names, _n_filaments)
+        _has_vlh = "Metadata/layer_heights_profile.txt" in _src_names
+        _already_converted = bool(_src_printer and "U1" in _src_printer)
         result = convert(
             source_path=src_path,
             reference_path=Path(descriptor.path),
@@ -683,7 +624,7 @@ async def api_convert(
             error_reason=type(err).__name__.lower(),
         )
         logger.exception("conversion failed")
-        raise HTTPException(500, detail=f"conversion failed: {err}") from err
+        raise HTTPException(500, detail="conversion failed") from err
 
     _counts = result.diff.counts()
     telemetry.record_conversion(
@@ -736,11 +677,10 @@ async def api_convert_bambu(
     Bambu-specific metadata files are preserved; model_settings is not
     rewritten.  Use /api/convert for Snapmaker U1 output.
     """
-    if not file.filename or not file.filename.lower().endswith(".3mf"):
-        raise HTTPException(400, detail="expected a .3mf upload")
+    _validate_upload_filename(file)
 
     try:
-        overrides = yaml.safe_load(advanced_overrides) or {}
+        overrides = yaml.safe_load(advanced_overrides) if advanced_overrides.strip() else {}
         if not isinstance(overrides, dict):
             raise ValueError("must be a mapping")
     except (ValueError, yaml.YAMLError) as err:
@@ -824,7 +764,7 @@ async def api_convert_bambu(
             },
         )
         logger.exception("conversion failed")
-        raise HTTPException(500, detail=f"conversion failed: {err}") from err
+        raise HTTPException(500, detail="conversion failed") from err
 
     diff_payload = {
         "report": result.diff.model_dump(),
@@ -858,6 +798,15 @@ def api_download(job_id: str) -> FileResponse:
 
 # ---------------------------------------------------------------------------
 # helpers
+
+def _validate_upload_filename(file: UploadFile) -> None:
+    """Treat the multipart filename as a name, never a filesystem path."""
+    name = file.filename
+    if not name or not name.lower().endswith(".3mf"):
+        raise HTTPException(400, detail="expected a .3mf upload")
+    if any(char in name for char in ("/", "\\", ":", "\x00")):
+        raise HTTPException(400, detail="invalid upload filename")
+
 
 def _save_upload(
     file: UploadFile, dst: Path, *, size_limit_bytes: int | None = None

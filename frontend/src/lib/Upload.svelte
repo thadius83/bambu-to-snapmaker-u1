@@ -47,7 +47,7 @@
   }}
   role="button"
   tabindex={disabled ? -1 : 0}
-  aria-label="Upload a Bambu .3mf file"
+  aria-label="Upload a .3mf project file"
   aria-disabled={disabled}
 >
   <input
@@ -71,7 +71,7 @@
   {:else}
     <div class="prompt">
       <div class="icon" aria-hidden="true">↑</div>
-      <div class="title">Drop your Bambu .3mf here</div>
+      <div class="title">Drop your .3mf project here</div>
       <div class="subtle">or click to choose a file</div>
     </div>
   {/if}
