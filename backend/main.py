@@ -42,13 +42,16 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 import telemetry
-from converter import convert, is_painted_model, _MULTIPLATE_SPAN_MM
+from converter import convert, is_painted_model
 from diff_reporter import summarise
+from model_settings import MetadataRewriteError
 from models import ConversionSettings
+from placement import decode_model_xml, is_multiplate
 from profile_loader import (
     ProfileLoadError,
     ProfileNotFoundError,
     list_profiles,
+    normalize_nozzle_diameters,
     read_project_settings,
     read_source_settings,
     resolve_profile,
@@ -382,27 +385,23 @@ async def api_suggest_profile(file: UploadFile = File(...)) -> dict[str, Any]:
     src = workdir / file.filename
     try:
         _save_upload(file, src, size_limit_bytes=MAX_UPLOAD_MB * 1024 * 1024)
-        try:
-            cfg, _detected_slicer = read_source_settings(src)
-        except ProfileLoadError as err:
-            telemetry.upload_errors_counter.add(1, {"reason": "unrecognised_file"})
-            _retain_failed_workdir(
-                job_id=job_id,
-                workdir=workdir,
-                endpoint="/api/suggest-profile",
-                filename=file.filename,
-                reference_profile="",
-                detail=str(err),
-                error_type=type(err).__name__,
-                request_meta={},
-            )
-            raise HTTPException(400, detail=str(err)) from err
+        cfg, _detected_slicer = read_source_settings(src)
         with zipfile.ZipFile(src) as _z:
             _names = _z.namelist()
             _model_xml = (
-                _z.read("3D/3dmodel.model").decode("utf-8", errors="replace")
+                decode_model_xml(_z.read("3D/3dmodel.model"), "3D/3dmodel.model")
                 if "3D/3dmodel.model" in _names else ""
             )
+            try:
+                _model_settings_xml = (
+                    _z.read("Metadata/model_settings.config").decode("utf-8")
+                    if "Metadata/model_settings.config" in _names else None
+                )
+            except UnicodeError as err:
+                raise MetadataRewriteError(
+                    "Cannot safely read Metadata/model_settings.config; re-export "
+                    "the project from its source slicer and try again."
+                ) from err
         profiles = list_profiles(PROFILES_DIR, USER_PROFILES_DIR)
         suggestion = suggest_profile(profiles, cfg)
         if suggestion is None:
@@ -430,17 +429,7 @@ async def api_suggest_profile(file: UploadFile = File(...)) -> dict[str, Any]:
         _painted = is_painted_model(_names, n_filaments)
 
         # Bed placement warnings
-        import re as _re
-        _transforms = _re.findall(r'transform="([^"]+)"', _model_xml)
-        _txs, _tys = [], []
-        for _t in _transforms:
-            _v = _t.split()
-            if len(_v) == 12:
-                _txs.append(float(_v[9])); _tys.append(float(_v[10]))
-        _is_multiplate = bool(_txs) and (
-            (max(_txs) - min(_txs)) > _MULTIPLATE_SPAN_MM or
-            (max(_tys) - min(_tys)) > _MULTIPLATE_SPAN_MM
-        )
+        _is_multiplate = is_multiplate(_model_xml, _model_settings_xml)
         _src_area = cfg.get("printable_area") or ["0x0"]
         _axs = [float(p.split("x")[0]) for p in _src_area]
         _ays = [float(p.split("x")[1]) for p in _src_area]
@@ -471,6 +460,7 @@ async def api_suggest_profile(file: UploadFile = File(...)) -> dict[str, Any]:
             "profile_id": suggestion.id,
             "display_name": suggestion.display_name,
             "source_printer": source_printer,
+            "source_nozzle_diameters": normalize_nozzle_diameters(cfg.get("nozzle_diameter")),
             "already_converted": already_converted,
             "filaments": filaments,
             "is_painted_model": _painted,
@@ -483,6 +473,19 @@ async def api_suggest_profile(file: UploadFile = File(...)) -> dict[str, Any]:
                 "print_settings_id": cfg.get("print_settings_id"),
             },
         }
+    except ProfileLoadError as err:
+        telemetry.upload_errors_counter.add(1, {"reason": "unrecognised_file"})
+        _retain_failed_workdir(
+            job_id=job_id,
+            workdir=workdir,
+            endpoint="/api/suggest-profile",
+            filename=file.filename,
+            reference_profile="",
+            detail=str(err),
+            error_type=type(err).__name__,
+            request_meta={},
+        )
+        raise HTTPException(400, detail=str(err)) from err
     finally:
         shutil.rmtree(workdir, ignore_errors=True)
 

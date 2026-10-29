@@ -7,6 +7,7 @@ export interface ProfileDescriptor {
   source: 'bundled' | 'user';
   layer_height: string | null;
   printer_variant: string | null;
+  nozzle_diameters: number[];
 }
 
 export interface RuleSummary {
@@ -31,6 +32,9 @@ export interface DiffPayload {
     source_filename: string;
     output_filename: string;
     reference_profile: string;
+    output_printer?: string | null;
+    source_nozzle_diameters: number[];
+    output_nozzle_diameters: number[];
     identity_swaps: Array<{ key: string; from_value: unknown; to_value: unknown }>;
     gcode_swaps: Array<{ key: string; from_bytes: number; to_bytes: number }>;
     keys_dropped: Array<{ key: string; reason: string }>;
@@ -84,7 +88,7 @@ export interface FilamentInfo {
 
 export async function suggestProfile(
   file: File,
-): Promise<{ profile_id: string; display_name: string; source_printer: string; already_converted: boolean; filaments: FilamentInfo[]; is_painted_model: boolean; is_multiplate: boolean; is_oversized: boolean; is_colour_mixed: boolean; source_slicer: string | null; matched_on: Record<string, unknown> }> {
+): Promise<{ profile_id: string; display_name: string; source_printer: string; source_nozzle_diameters: number[]; already_converted: boolean; filaments: FilamentInfo[]; is_painted_model: boolean; is_multiplate: boolean; is_oversized: boolean; is_colour_mixed: boolean; source_slicer: string | null; matched_on: Record<string, unknown> }> {
   const form = new FormData();
   form.append('file', file);
   return handle(await fetch('/api/suggest-profile', { method: 'POST', body: form }));

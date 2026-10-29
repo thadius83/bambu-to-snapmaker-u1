@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { ProfileDescriptor } from './api';
+  import NozzleWarning from './NozzleWarning.svelte';
 
   interface Props {
     profiles: ProfileDescriptor[];
@@ -9,6 +10,7 @@
     advancedOverrides: string;
     autoMatched?: boolean;
     disabled?: boolean;
+    sourceNozzleDiameters?: number[];
   }
 
   let {
@@ -19,6 +21,7 @@
     advancedOverrides = $bindable(),
     autoMatched = false,
     disabled = false,
+    sourceNozzleDiameters = [],
   }: Props = $props();
 
   let showAdvanced = $state(false);
@@ -48,6 +51,11 @@
       {/each}
     </select>
   </div>
+
+  <NozzleWarning
+    source={sourceNozzleDiameters}
+    target={profiles.find(p => p.id === selectedProfile)?.nozzle_diameters ?? []}
+  />
 
   <div class="toggles">
     <label class="toggle">

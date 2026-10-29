@@ -81,6 +81,7 @@
   let isOversized = $state(false);
   let isColourMixed = $state(false);
   let sourceSlicer = $state<string | null>(null);
+  let sourceNozzleDiameters = $state<number[]>([]);
   let paintedSlotMap = $state<Record<number, number>>({});
   let detectedFilaments = $state<Array<{index:number;settings_id:string|null;filament_type:string|null;vendor:string|null;colour:string|null}>>([]);
   let applyRules = $state(true);
@@ -141,6 +142,7 @@
       isOversized = s.is_oversized;
       isColourMixed = s.is_colour_mixed;
       sourceSlicer = s.source_slicer ?? null;
+      sourceNozzleDiameters = s.source_nozzle_diameters ?? [];
       detectedFilaments = s.filaments;
       insertSwapPauses = s.filaments.length > 4 && !s.is_painted_model;
     } catch (err) {
@@ -165,6 +167,7 @@
     isMultiplate = false;
     isOversized = false;
     sourceSlicer = null;
+    sourceNozzleDiameters = [];
     paintedSlotMap = {};
     detectedFilaments = [];
     if (f && profiles.length > 0) {
@@ -224,6 +227,7 @@
     isMultiplate = false;
     isOversized = false;
     sourceSlicer = null;
+    sourceNozzleDiameters = [];
     paintedSlotMap = {};
   }
 </script>
@@ -326,6 +330,7 @@
           diff={result.diff}
           jobId={result.job_id}
           downloadName={result.download_name}
+          showNozzleWarning
           onreset={reset}
           ondownload={() => { if (canShowVotePrompt()) showVoteToast = true; }}
         />
@@ -371,13 +376,13 @@
 
             {#if isMultiplate}
               <div class="warn-banner" role="alert">
-                <strong>Multi-plate project:</strong> this file contains multiple plates. Only the first plate will be automatically positioned on the U1 bed — use Orca's arrange tool for remaining plates after conversion.
+                <strong>Multi-plate project:</strong> check each plate and its prime tower in Orca after conversion. Use Arrange if anything sits outside the bed.
               </div>
             {/if}
 
             {#if isOversized}
               <div class="warn-banner" role="alert">
-                <strong>Large build plate:</strong> this file was designed for a bed larger than the U1's 270×270mm build area. Check model placement in Orca after conversion.
+                <strong>Large build plate:</strong> this file was designed for a bed larger than the U1's 270×270mm build area. Check model and prime-tower placement in Orca after conversion.
               </div>
             {/if}
 
@@ -416,6 +421,7 @@
             <div class="right-col">
               <Settings
                 {profiles}
+                {sourceNozzleDiameters}
                 bind:selectedProfile
                 bind:applyRules
                 bind:insertSwapPauses

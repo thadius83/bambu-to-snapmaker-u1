@@ -15,8 +15,8 @@ before printing.
 |---|---|
 | Bambu Studio / Bambu Lab `.3mf` | Includes projects downloaded from MakerWorld. |
 | Orca-format non-Bambu `.3mf` | Flashforge, Anycubic, Creality, and similar Orca-based exports use the same project structure. |
-| PrusaSlicer `.3mf` | Reads `Slic3r_PE.config`; Prusa MMU face painting is translated to Snapmaker Orca paint data. |
-| Cura `.3mf` | Reads Cura user config where available. |
+| PrusaSlicer `.3mf` | Imports supported settings, including nozzle/bed temperatures and first-layer height; preserves per-part colours, repeated instances and MMU face painting. Review the converted project in Snapmaker Orca. |
+| Cura `.3mf` | Reads layer height from Cura user config where available; other settings use the selected U1 reference defaults. |
 | Bare geometry `.3mf` | No slicer settings are available, so the converter defaults to the bundled `0.20 Standard` U1 profile. |
 | Sliced `.gcode.3mf` without model geometry | Not supported. These files contain printer-specific plate G-code but no editable model data. Upload the original project `.3mf` instead. |
 
@@ -24,68 +24,83 @@ before printing.
 
 **<https://u1convert.com>**
 
-## Quick start 
+## Quick start
 
 ```bash
 git clone https://github.com/thadius83/bambu-to-snapmaker-u1.git
 cd bambu-to-snapmaker-u1
-cp .env.example .env       # safe defaults; no editing needed for first run
+cp .env.example .env
+```
+
+For local use, set `VITE_SITE_URL=http://localhost:8084` and
+`DOMAINHOST=localhost` in `.env`. For a public deployment, replace the example
+domain with your own URL and hostname before building.
+
+```bash
 docker compose up --build
 ```
 
-Open **<http://localhost:8084>** in your browser. That's it.
+Open **<http://localhost:8084>** in your browser.
 
 No accounts, no database, no external dependencies beyond Docker.
 
 ## What it does
 
-1. **Identity swap** — replaces hardware-only keys (`printer_model`,
-   `printer_settings_id`, build volume, nozzle specs) from the selected U1
-   reference profile. All print intent — layer heights, speeds, filament
-   names, temperatures — flows from the source file unchanged.
-2. **G-code swap** — replaces all 9 custom G-code blocks (start, end,
-   layer-change, before-layer-change, change-filament, pause, timelapse, etc.)
-   with U1 equivalents. Bambu's AMS-specific G-code would crash U1 firmware.
-3. **Key filter** — drops Bambu-only keys not present in the U1 reference
-   schema (~170 in a typical file).
-4. **Speed / accel clamp** — enforces the U1 reference profile's values as
-   ceilings. The reference itself is the source of truth — no hard-coded
-   numbers.
-5. **Filament rules** — YAML-based matching on filament name / vendor / type.
-   Applies per-key overrides (speed, accel, temperature). Maintain the YAML
-   files directly; view rules and test matching in the browser.
-6. **Filament slot remap** — preserves source colour array order exactly
-   (slot N stays at slot N). Painted-face colour assignments are preserved via
-   mesh paint data (`paint_color`) where the source format provides it.
-7. **Filament swap pauses** (auto-enabled for >4 colours) — detects when a
-   physical toolhead must switch spools mid-print and inserts M600 pause
-   elements one full layer before each swap, with a colour-coded swap guide
-   in the post-conversion diff view.
-8. **Slice cache strip** — removes `Metadata/plate_*.gcode` and
-   `plate_*.json` so Snapmaker Orca is forced to re-slice rather than use
-   stale Bambu output.
-9. **Sliced-only guard** — rejects `.gcode.3mf` uploads that contain plate
-   G-code but no editable model geometry, so users get a clear upload error
-   instead of a tiny output file with no objects.
+1. **Identity swap:** takes printer identity, build volume and nozzle specs
+   from the selected U1 reference profile. Compatible source settings are
+   retained where supported; reference defaults, tuning rules and conversion
+   options can change the output. U1 standby cooling and advance preheating
+   settings also come from the reference. Exclude objects is always enabled
+   for U1 output, overriding source and advanced settings.
+2. **G-code swap:** replaces the 9 configured custom G-code blocks (start,
+   end, layer-change, before-layer-change, change-filament, pause, etc.) with
+   reference equivalents, removing blocks absent from the reference.
+3. **Key filter:** filters settings against the reference profile's keys,
+   with exceptions for supported metadata and print settings.
+4. **Speed / accel clamp:** when enabled, uses the U1 reference profile's
+   positive values as ceilings for selected speed and acceleration settings,
+   and clamps enabled process jerk to target machine limits.
+5. **Filament rules:** YAML-based matching on filament name / vendor / type.
+   Applies process-setting overrides. Maintain the YAML files directly;
+   view rules and test matching in the browser. Numeric overrides act as
+   ceilings, as described below.
+6. **Filament slots:** keeps painted-face colours, object and part assignments,
+   feature-specific filament settings and per-layer tool changes aligned
+   with physical filament slot mappings.
+7. **Filament swap pauses:** enabled automatically for non-painted projects
+   with more than 4 colours. Uses source per-layer tool-change data to insert
+   M600 pauses before spool swaps and produce a colour-coded swap guide.
+   Projects without that data need manual swap planning.
+8. **Slice cache strip:** removes cached plate G-code and slice metadata,
+   then writes minimal plate metadata. Re-slice the converted project in
+   Snapmaker Orca before printing.
+9. **Sliced-only guard:** rejects `.gcode.3mf` uploads that contain plate
+   G-code but no editable model geometry.
 
-The diff view after conversion shows every change made before you download.
+The results page shows the output printer, summarises recorded setting changes
+and any swap guide, and warns when the detected source nozzle size changes.
+Review the converted project in Snapmaker Orca before printing.
 
 ## Volumes
 
 | Mount | Purpose |
 |---|---|
-| `./user_profiles` | Extra U1 reference `.3mf` files. Any file here with the same name as a bundled profile shadows it. |
+| `./profiles` | Bundled U1 reference `.3mf` files. |
+| `./user_profiles` | Extra U1 reference `.3mf` files. Any file here with the same profile ID as a bundled profile shadows it. |
 | `./rules` | YAML filament-tuning rules. Maintain these files directly; the Rules page is read-only. |
-| `./tmp` | Converted files retained for 5 minutes after the conversion completes. |
+| `./tmp` | Uploads and converted files, automatically cleaned after the configured download window (5 minutes by default). |
+| `./tmp_failed` | Failed conversion files, retained only when `RETAIN_FAILED_FILES=true`. |
+| `./feedback` | Saved feedback submissions. |
 
 ## Adding reference profiles
 
-Export a print profile from Snapmaker Orca as a `.3mf` file (File → Export →
-Export All Objects, or just save the project with a trivial test object).
-Drop the file in `./user_profiles/`. It will appear in the profile dropdown
-immediately — no restart needed.
+Save a project from Snapmaker Orca as a `.3mf` file containing a small model
+and your chosen U1 printer and print settings. Drop it in `./user_profiles/`
+and refresh the page to update the profile dropdown. No server restart is
+needed.
 
-Bundled profiles in `./profiles/` cover the full U1 layer-height range:
+The 10 bundled reference projects in `./profiles/` use a 0.4 mm nozzle and
+cover these layer heights:
 
 | Profile | Layer height |
 |---|---|
@@ -95,6 +110,7 @@ Bundled profiles in `./profiles/` cover the full U1 layer-height range:
 | 0.16 Optimal | 0.16 mm |
 | 0.16 High Quality | 0.16 mm |
 | 0.20 Standard | 0.20 mm (default) |
+| 0.20 Standard (Cube lots of colours) | 0.20 mm |
 | 0.20 Strength | 0.20 mm |
 | 0.24 Draft | 0.24 mm |
 | 0.28 Extra Draft | 0.28 mm |
@@ -102,8 +118,8 @@ Bundled profiles in `./profiles/` cover the full U1 layer-height range:
 ## Writing filament rules
 
 Rules live as individual YAML files in `./rules/`. Maintain these files directly
-on the filesystem. Changes are picked up on the next conversion — no restart
-needed. The Rules page lets you view the shared rules and test matching against
+on the filesystem. Changes are picked up on the next conversion; no restart
+is needed. The Rules page lets you view the shared rules and test matching against
 a `.3mf` file.
 
 ### Schema
@@ -119,41 +135,46 @@ match:
 overrides:
   outer_wall_speed: 80                 # any process-settings key: value
   default_acceleration: 3000
-priority: 10                           # higher number = applied later (wins)
+priority: 10                           # higher number = applied later
 enabled: true
 ```
 
 **Matching logic:** all specified conditions must be true simultaneously
-(AND). Multiple rules can match; they apply in ascending `priority` order so
-higher-priority rules overwrite lower ones on conflicting keys.
+(AND). Filament conditions must match the same filament. Multiple rules can
+match; they apply in ascending `priority` order.
+
+**Override behaviour:** numeric values act as ceilings when the existing
+value is also numeric. A later rule cannot raise a value already below its
+ceiling. Missing settings are filled, and non-numeric overrides replace the
+existing value.
 
 **Scope:** rules apply globally to the process profile, not per-object.
-Per-object scoping is a planned extension.
 
 ### Seed rules included
 
 | File | Targets |
 |---|---|
-| `silk_pla.yaml` | Bambu PLA Silk+ — slower speeds, reduced accel |
-| `petg_hf.yaml` | Bambu PETG HF — moderate speeds, 255°C nozzle |
-| `petg_translucent.yaml` | Bambu PETG Translucent — conservative speeds for optical clarity |
-| `pla.yaml` | Generic Bambu PLA Basic — balanced U1 speeds |
-| `pla_matte.yaml` | Bambu PLA Matte — slightly reduced speeds |
+| `silk_pla.yaml` | Bambu PLA Silk+: slower speeds, reduced accel |
+| `petg_hf.yaml` | Bambu PETG HF: moderate speeds and reduced acceleration |
+| `petg_translucent.yaml` | Bambu PETG Translucent: conservative speeds for optical clarity |
+| `pla.yaml` | Generic Bambu PLA Basic: balanced U1 speeds |
+| `pla_matte.yaml` | Bambu PLA Matte: slightly reduced speeds |
 
 Values are based on Bambu's published tuning guidance; adjust the YAML files
 to suit your spool.
 
 ## Configuration
 
-Configuration is via `.env` (copied from `.env.example` on first run). The
-common knobs:
+Configure the service through `.env`. The defaults below apply when a
+variable is unset; `.env.example` contains domain placeholders that need
+replacing before building.
 
 | Variable | Default | Description |
 |---|---|---|
 | `MAX_UPLOAD_MB` | `300` | Upload size cap |
 | `CLEANUP_TEMP_AFTER_SECONDS` | `300` | How long converted files stay available for download before being purged |
 | `RETAIN_FAILED_FILES` | `false` | Keep failed conversion workdirs in `tmp_failed/` for debugging |
-| `VITE_SITE_URL` | `http://localhost:8083` | Canonical URL baked into the frontend (SEO meta + privacy page) |
+| `VITE_SITE_URL` | `http://localhost:8084` | Canonical URL baked into the frontend (SEO meta + privacy page) |
 | `DOMAINHOST` | `localhost` | Hostname used for `robots.txt` and `sitemap.xml` |
 
 Optional analytics (Google Analytics 4, Cloudflare Web Analytics) and
@@ -201,7 +222,7 @@ backend/
   security.py       CSP composition + privacy-page conditional rendering
 
 frontend/src/
-  App.svelte        Root component — routing, theme, convert state machine
+  App.svelte        Root component: routing, theme, convert state machine
   lib/Upload.svelte Drag-drop zone
   lib/Settings.svelte  Profile dropdown, toggles, advanced overrides
   lib/DiffView.svelte  Post-conversion change summary + swap guide
@@ -209,37 +230,37 @@ frontend/src/
   lib/api.ts        Typed fetch wrappers for every API endpoint
 
 profiles/           Bundled U1 reference 3mf files (committed)
-user_profiles/      Mounted volume — user reference overrides
-rules/              Mounted volume — YAML filament rules
+user_profiles/      Mounted volume: user reference overrides
+rules/              Mounted volume: YAML filament rules
 tmp/                Per-request working dirs, auto-cleaned
 ```
 
 ## Need a sample input?
 
-Grab a Bambu Studio `.3mf` from [MakerWorld](https://makerworld.com/) or your
+Grab a Bambu Studio `.3mf` from [my MakerWorld profile](https://makerworld.com/en/@iprintstuffau) or your
 own slicer history. You can also upload OrcaSlicer, PrusaSlicer, Cura, and
 basic geometry `.3mf` files.
 
-Painted multi-colour models work — the converter preserves source colour slots
-and mesh paint data where available. For layer-based prints with more than 4
-colours, it can insert pause stops to guide manual spool swaps. For painted
-models with more than 4 colours, review the result in Snapmaker Orca and plan
-toolhead/manual swap handling before printing.
+Paint data is retained or translated where supported. Check the colour
+assignments in Snapmaker Orca, particularly after changing slot mappings.
+Layer-based prints with more than 4 colours can use swap pauses when the
+source contains per-layer tool-change data. Painted models with more than
+4 colours need manual toolhead and spool-swap planning.
 
 ## Known limitations
 
-- U1 only, 0.4 mm nozzle only. Drop any Orca-exported `.3mf` in
-  `user_profiles/` to target a different printer (works mechanically; not
-  fully tested).
-- No conversion history or re-download after the cleanup window.
-- No in-app slicing — review the converted settings and re-slice in
-  Snapmaker Orca before printing.
+- The main converter targets the U1. Bundled references use a 0.4 mm nozzle;
+  the selected reference determines the output nozzle size. Other U1 nozzle
+  sizes require a suitable reference project and review of layer heights
+  and line widths. Arbitrary printer references are not supported in this flow.
 - Sliced `.gcode.3mf` files without editable model geometry cannot be converted;
   upload the original project `.3mf`.
-- No support for colour mixing / full spectrum at this stage **planned**
-- As the Snapmaker Orca Slicer matures, the code will need to change to adapt.
-- Prints that are larger than the U1 build plate will convert, but obviously will need additional processing
-- Snapmaker Orca has several bugs and issues relating to the prime tower, a quick fix is to enable/disable/move the object/tower around and reslice
+- Native colour mixing support is in development.
+- PrusaSlicer and Cura imports do not preserve every source setting. Check
+  temperatures, supports and filament assignments before slicing.
+- Models are not automatically scaled to fit the U1 build plate. Review model
+  and prime-tower placement, especially for larger source beds and multi-plate
+  projects; manual arrangement may be required.
 
 ## Support the project
 
@@ -259,7 +280,7 @@ Open an issue on [GitHub](https://github.com/thadius83/bambu-to-snapmaker-u1/iss
 [PolyForm Noncommercial 1.0.0](LICENSE).
 
 You may use, modify, and redistribute this software for any non-commercial
-purpose — personal projects, hobbyist use, research, education, and
+purpose: personal projects, hobbyist use, research, education, and
 charitable / non-profit organisations are all explicitly allowed. Commercial
 use (selling the software, running it as a paid service, integrating it into
 commercial products) requires a separate license; contact the project

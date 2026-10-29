@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import lzma
+import math
 import re
 import zipfile
 import zlib
@@ -37,6 +38,23 @@ class ProfileNotFoundError(Exception):
 
 class ProfileLoadError(Exception):
     pass
+
+
+def normalize_nozzle_diameters(value: object) -> list[float]:
+    """Return known distinct nozzle sizes; any invalid entry makes them unknown."""
+    values = value if isinstance(value, list) else [value]
+    diameters: set[float] = set()
+    for entry in values:
+        if isinstance(entry, bool) or not isinstance(entry, (str, int, float)):
+            return []
+        try:
+            diameter = float(entry)
+        except (ValueError, OverflowError):
+            return []
+        if not math.isfinite(diameter) or diameter <= 0:
+            return []
+        diameters.add(diameter)
+    return sorted(diameters)
 
 
 def _validate_archive_members(zf: zipfile.ZipFile) -> None:
@@ -116,6 +134,31 @@ def read_project_settings(profile_path: Path) -> dict:
         raise ProfileLoadError(f"{profile_path.name} has invalid archive text encoding") from err
 
 
+def apply_prusa_bed_temperatures(source_cfg: dict, reference_cfg: dict) -> dict:
+    """Map Prusa's generic bed temperatures to the selected target plate only."""
+    cfg = dict(source_cfg)
+    if not any(key in cfg for key in ("bed_temperature", "first_layer_bed_temperature")):
+        return cfg
+    plate_key = {
+        "Cool Plate": "cool_plate_temp",
+        "Engineering Plate": "eng_plate_temp",
+        "High Temp Plate": "hot_plate_temp",
+        "Textured PEI Plate": "textured_plate_temp",
+        "Textured Cool Plate": "textured_cool_plate_temp",
+        "Supertack Plate": "supertack_plate_temp",
+        "Graphic Effect Plate": "graphic_effect_plate_temp",
+    }.get(reference_cfg.get("curr_bed_type"))
+    if plate_key is None:
+        raise ProfileLoadError("Cannot map Prusa bed temperatures to the target bed type")
+    for source_key, target_key in (
+        ("bed_temperature", plate_key),
+        ("first_layer_bed_temperature", plate_key + "_initial_layer"),
+    ):
+        if source_key in cfg:
+            cfg[target_key] = cfg.pop(source_key)
+    return cfg
+
+
 def read_source_settings(source_path: Path) -> tuple[dict, str | None]:
     """Read settings from any supported 3mf format.
 
@@ -141,6 +184,41 @@ def read_source_settings(source_path: Path) -> tuple[dict, str | None]:
                 m = re.search(r"^; layer_height = ([0-9.]+)$", raw, re.MULTILINE)
                 if m:
                     cfg["layer_height"] = m.group(1).strip()
+                nozzle = re.search(r"^; nozzle_diameter = (.*)$", raw, re.MULTILINE)
+                if nozzle:
+                    cfg["nozzle_diameter"] = [
+                        value.strip().strip('"') for value in re.split(r"[;,]", nozzle.group(1))
+                    ]
+                for key in ("printer_settings_id", "printer_model"):
+                    identity = re.search(rf"^; {key} = (.*)$", raw, re.MULTILINE)
+                    if identity and (value := identity.group(1).strip().strip('"')):
+                        cfg[key] = value
+                for ps_key, orca_key in (
+                    ("temperature", "nozzle_temperature"),
+                    ("first_layer_temperature", "nozzle_temperature_initial_layer"),
+                    ("bed_temperature", "bed_temperature"),
+                    ("first_layer_bed_temperature", "first_layer_bed_temperature"),
+                ):
+                    temperatures = re.search(rf"^; {ps_key} = (.*)$", raw, re.MULTILINE)
+                    if temperatures:
+                        values = [value.strip() for value in temperatures.group(1).split(",")]
+                        if not all(re.fullmatch(r"[0-9]+", value) for value in values):
+                            raise ProfileLoadError(f"Invalid Prusa {ps_key}")
+                        cfg[orca_key] = values
+                first_layer = re.search(r"^; first_layer_height = (.*)$", raw, re.MULTILINE)
+                if first_layer:
+                    value = first_layer.group(1).strip()
+                    try:
+                        if value.endswith("%"):
+                            # Prusa resolves percentages against layer_height, not nozzle size.
+                            height = float(value[:-1]) / 100 * float(cfg["layer_height"])
+                        else:
+                            height = float(value)
+                        if not math.isfinite(height) or height <= 0:
+                            raise ValueError
+                    except (KeyError, ValueError, OverflowError) as err:
+                        raise ProfileLoadError("Invalid or unresolved Prusa first_layer_height") from err
+                    cfg["initial_layer_print_height"] = f"{height:g}"
                 # Parse semicolon-delimited filament arrays from INI comments.
                 for ps_key, orca_key in (
                     ("filament_settings_id", "filament_settings_id"),
@@ -249,6 +327,7 @@ def _descriptor(path: Path, source: str) -> ProfileDescriptor:
         source=source,
         layer_height=_as_str(settings.get("layer_height")),
         printer_variant=_as_str(settings.get("printer_variant")),
+        nozzle_diameters=normalize_nozzle_diameters(settings.get("nozzle_diameter")),
     )
 
 

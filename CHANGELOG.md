@@ -11,6 +11,11 @@ Last updated: 2026-10-29
 
 ### Added
 
+- Visible nozzle-size change warnings below profile selection and above the
+  download button, including 0.2, 0.6 and 0.8 mm source nozzles converted to
+  the bundled 0.4 mm U1 profiles.
+- Show the final output printer on the conversion results page, with clearer
+  source-printer identification for Prusa imports.
 - Support for compatible non-Bambu `.3mf` sources:
   Orca-format exports from Flashforge, Anycubic, Creality, and similar slicers;
   PrusaSlicer projects; Cura projects; and bare-geometry `.3mf` files.
@@ -22,6 +27,8 @@ Last updated: 2026-10-29
 
 ### Changed
 
+- Keep Exclude objects enabled for all U1 conversions, overriding source and
+  advanced settings.
 - Bare-geometry `.3mf` uploads now fall back to the bundled `0.20 Standard`
   U1 profile when no layer-height metadata exists.
 - Refresh Snapmaker U1 branding, search metadata and the social preview to
@@ -36,6 +43,25 @@ Last updated: 2026-10-29
 
 ### Fixed
 
+- Use the U1 profile's cutter-retraction settings; invalid source filament
+  cutter overrides inherit the printer setting.
+- Use target machine jerk limits and clamp enabled process jerk when speed
+  clamping is selected.
+- Keep painted colours, object and part filament assignments, feature-specific
+  filament settings, and per-layer tool changes aligned with slot remapping.
+- Map models to target bed centres and adjust multi-plate layouts and prime-tower
+  positions when source bed and plate metadata is available. Towers may still
+  need manual arrangement after slicing.
+- Preserve editable text and shape metadata when updating model settings, with
+  a clear error when those settings cannot be safely rewritten.
+- Preserve Prusa per-part colours, repeated instances and existing face painting
+  when importing projects as native Orca parts.
+- Correct colour loss when similarly sized Prusa solid parts overlap, while
+  keeping the model grouped.
+- Preserve Prusa nozzle and bed temperatures and first-layer height, including
+  percentage-based heights, instead of substituting reference defaults.
+- Translate Bambu's disabled fuzzy-skin setting to the U1-compatible value to
+  avoid a slicer compatibility warning.
 - General security and reliability improvements.
 - Prevented geometry-empty output files when users upload sliced G-code 3MFs
   instead of original project files.

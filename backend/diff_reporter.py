@@ -94,10 +94,11 @@ def summarise(report: DiffReport) -> list[dict[str, Any]]:
         summary = f"Identity swapped ({len(report.identity_swaps)} keys)"
         if printer_changes:
             pm = next(
-                (s for s in printer_changes if s.key == "printer_model"),
-                printer_changes[0],
+                (s for s in printer_changes if s.key == "printer_model" and s.from_value),
+                next((s for s in printer_changes if s.from_value), printer_changes[0]),
             )
-            summary = f"Identity swapped: {pm.from_value} → {pm.to_value}"
+            source_printer = pm.from_value or "Unknown source printer"
+            summary = f"Identity swapped: {source_printer} → {pm.to_value}"
         sections.append(
             {
                 "title": "Printer identity",

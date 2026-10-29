@@ -9,7 +9,7 @@ Run order, matching ``docs/techbrief.md``:
   5. Key filter (drop Bambu-only keys)
   6. Value clamp (speed / accel ceilings from the reference)
   7. Rules engine
-  8. Advanced user overrides (from the UI, applied last so they win)
+  8. Advanced user overrides, then enforce U1 object exclusion
   9. Normalise filament_* arrays to 4 slots (U1 has 4 toolheads)
  10. Filament slot remap on model_settings.config
  11. Key-filter model_settings.config (no-op in v1 — we don't drop XML attrs)
@@ -24,13 +24,13 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import re
 import time
 import zipfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
-from xml.etree import ElementTree as ET
 
 log = logging.getLogger("u13mf.converter")
 
@@ -45,7 +45,11 @@ from metadata_helpers import (
     translate_prusa_mmu_paint,
 )
 from models import ConversionSettings, DiffReport, RuleDefinition, SlotRemapEvent
-from profile_loader import read_project_settings, read_source_settings
+from model_settings import MetadataRewriteError, VALUE_REMAP as _VALUE_REMAP, rewrite_model_settings as _rewrite_model_settings
+from paint_remap import remap_paint_color
+from prusa_parts import import_prusa_parts
+from placement import bed_offset, bed_shift as _bed_shift, decode_model_xml
+from profile_loader import apply_prusa_bed_temperatures, normalize_nozzle_diameters, read_project_settings, read_source_settings
 from rules_engine import FilamentContext, apply_rules
 from swap_pauses import insert_swap_pauses
 
@@ -88,11 +92,14 @@ _NEGATIVE_SENTINEL_KEYS: frozenset[str] = frozenset({
     "prime_tower_lift_height",
 })
 
-# Direct value remaps for Bambu enum strings that Orca does not recognise.
-_VALUE_REMAP: dict[str, dict[str, str]] = {
-    "ensure_vertical_shell_thickness": {"disabled": "none", "enabled": "ensure_all", "partial": "ensure_all"},
-    "support_style": {"tree_organic": "default"},
+_FILAMENT_ROLE_KEYS = _FILAMENT_SLOT_SENTINEL_KEYS | {
+    "support_filament", "support_interface_filament", "wipe_tower_filament",
 }
+
+_PROCESS_JERK_KEYS = frozenset({
+    "default_jerk", "outer_wall_jerk", "inner_wall_jerk", "infill_jerk",
+    "top_surface_jerk", "initial_layer_jerk", "travel_jerk",
+})
 
 # Snapmaker U1 has 4 physical toolheads.
 _U1_TOOLHEADS_DEFAULT = 4
@@ -102,15 +109,6 @@ MODEL_SETTINGS = "Metadata/model_settings.config"
 SLICE_INFO = "Metadata/slice_info.config"
 CUSTOM_GCODE_XML = "Metadata/custom_gcode_per_layer.xml"
 MODEL_3D = "3D/3dmodel.model"
-
-# Build items spanning more than this in X or Y are a multi-plate layout —
-# skip the bed-origin shift for those files.  400mm rather than 300mm so
-# that large H2D single-plate models (up to 350mm bed) are still shifted;
-# genuine 2-plate layouts span ~700mm+ between plate centroids.
-_MULTIPLATE_SPAN_MM = 400.0
-
-# Clearance added beyond the U1 bed origin to avoid Orca's boundary warning.
-_BED_MARGIN_MM = 3.0
 
 
 def is_painted_model(archive_names: list[str], filament_count: int) -> bool:
@@ -186,8 +184,10 @@ def convert(
         settings.preserve_color_painting,
     )
 
-    source_cfg, _ = read_source_settings(source_path)
+    source_cfg, source_slicer = read_source_settings(source_path)
     reference_cfg = read_project_settings(reference_path)
+    if source_slicer == "PrusaSlicer":
+        source_cfg = apply_prusa_bed_temperatures(source_cfg, reference_cfg)
 
     with zipfile.ZipFile(source_path) as _znames:
         _src_names = _znames.namelist()
@@ -208,6 +208,7 @@ def convert(
         output_filename=output_path.name,
         reference_profile=reference_path.stem,
     )
+    diff.build().source_nozzle_diameters = normalize_nozzle_diameters(source_cfg.get("nozzle_diameter"))
 
     # 3. identity swap
     merged = _apply_identity_swap(source_cfg, reference_cfg, diff)
@@ -240,8 +241,7 @@ def convert(
     for k, v in reference_cfg.items():
         merged.setdefault(k, v)
 
-    # U1 toolheads need the target's multi-extruder and standby cooling policy.
-    # Bambu single-nozzle settings otherwise leave parked heads at print temperature.
+    # Hardware limits and toolhead cooling policy belong to the target printer.
     if not preserve_bambu_metadata:
         for key in (
             "single_extruder_multi_material",
@@ -249,6 +249,13 @@ def convert(
             "standby_temperature_delta",
             "preheat_time",
             "preheat_steps",
+            "retraction_distances_when_cut",
+            "long_retractions_when_cut",
+            "enable_long_retraction_when_cut",
+            "machine_max_jerk_x",
+            "machine_max_jerk_y",
+            "machine_max_jerk_z",
+            "machine_max_jerk_e",
         ):
             if key in reference_cfg:
                 old = merged.get(key)
@@ -321,6 +328,19 @@ def convert(
     merged = _collapse_extruder_lists(merged, reference_cfg)
     log.info("STAGE  collapse-lists: done")
 
+    # Nullable filament cutter overrides use the same 10–18 mm range as the
+    # U1 printer setting. Invalid source values inherit that printer setting.
+    if not preserve_bambu_metadata:
+        key = "filament_retraction_distances_when_cut"
+        old = merged.get(key)
+        if isinstance(old, list):
+            new = [_valid_cutter_override(value) for value in old]
+        else:
+            new = _valid_cutter_override(old) if old is not None else old
+        if new != old:
+            merged[key] = new
+            diff.record_identity_swap(key, old, new)
+
     # 5c. Filament-role slot sentinels: Bambu uses "0" (auto); U1 needs explicit "1".
     n_slot = 0
     for key in _FILAMENT_SLOT_SENTINEL_KEYS:
@@ -362,6 +382,8 @@ def convert(
     # 5e. Enum remaps: Bambu enum strings Orca doesn't recognise.
     n_enum = 0
     for key, mapping in _VALUE_REMAP.items():
+        if key == "fuzzy_skin" and preserve_bambu_metadata:
+            continue
         val = merged.get(key)
         if isinstance(val, str) and val in mapping:
             merged[key] = mapping[val]
@@ -373,6 +395,21 @@ def convert(
     # 6. clamp speed / accel ceilings
     if settings.clamp_speeds:
         merged, clamp_events = clamp_numeric_ceilings(merged, reference_cfg)
+        # Orca compares enabled process jerk to the normal-mode XY limit.
+        # Default 0 disables process jerk control; retain that behavior.
+        if not preserve_bambu_metadata and (_first_float(merged.get("default_jerk")) or 0) > 0:
+            limits = [_first_float(reference_cfg.get(f"machine_max_jerk_{axis}")) for axis in ("x", "y")]
+            if all(limit is not None and limit > 0 for limit in limits):
+                ceiling = min(limits)
+                # The general scalar clamp replaces 0/-1 sentinels. Jerk's
+                # inherited/disabled values must remain untouched instead.
+                ceilings = {
+                    key: [ceiling] if isinstance(merged.get(key), list) else ceiling
+                    for key in _PROCESS_JERK_KEYS
+                    if isinstance(merged.get(key), list) or (_first_float(merged.get(key)) or 0) > 0
+                }
+                merged, jerk_events = clamp_numeric_ceilings(merged, ceilings, clamp_keys=ceilings)
+                clamp_events.extend(jerk_events)
         diff.extend_values_clamped(clamp_events)
         log.info("STAGE  clamp: %d values clamped", len(clamp_events))
     else:
@@ -418,10 +455,19 @@ def convert(
 
     # 8. advanced per-key overrides
     for k, v in settings.advanced_overrides.items():
+        if k == "exclude_object" and not preserve_bambu_metadata:
+            continue
         merged[k] = v
         diff.record_advanced_override(k, v)
     if settings.advanced_overrides:
         log.info("STAGE  advanced-overrides: %d keys", len(settings.advanced_overrides))
+
+    # Exclude Objects is mandatory for U1 output, including explicit overrides.
+    if not preserve_bambu_metadata:
+        old = merged.get("exclude_object")
+        merged["exclude_object"] = "1"
+        if old != "1":
+            diff.record_identity_swap("exclude_object", old, "1")
 
     # 9. filament array normalisation — preserve source slot count exactly.
     # For Bambu-to-Bambu the source count is authoritative (AMS handles any
@@ -454,6 +500,14 @@ def convert(
     remap = _normalise_filament_arrays(
         merged, source_cfg, diff, slot_map=settings.slot_map or {}, n_target=n_target
     )
+    if not preserve_bambu_metadata:
+        for key in _FILAMENT_ROLE_KEYS:
+            try:
+                slot = int(merged.get(key, 0))
+            except (ValueError, TypeError):
+                continue
+            if slot > 0 and slot - 1 in remap:
+                merged[key] = str(max(remap[slot - 1], 0) + 1)
     # Clip or pad per-slot hardware arrays not handled by _normalise_filament_arrays.
     for _hw_key in ("nozzle_diameter", "nozzle_type", "nozzle_volume"):
         _hw_val = merged.get(_hw_key)
@@ -545,6 +599,11 @@ def convert(
     )
 
     report = diff.build()
+    report.output_printer = next((
+        value for key in ("printer_settings_id", "printer_model")
+        if isinstance(value := merged.get(key), str) and value.strip()
+    ), None)
+    report.output_nozzle_diameters = normalize_nozzle_diameters(merged.get("nozzle_diameter"))
     out_size = output_path.stat().st_size
     elapsed = (time.monotonic() - t0) * 1000
     counts = report.counts()
@@ -567,6 +626,15 @@ def convert(
 
 # ---------------------------------------------------------------------------
 # identity + filament helpers
+
+
+def _valid_cutter_override(value: Any) -> Any:
+    if value == "nil":
+        return value
+    try:
+        return value if 10 <= float(value) <= 18 else "nil"
+    except (TypeError, ValueError):
+        return "nil"
 
 
 def _apply_identity_swap(
@@ -788,66 +856,6 @@ def _normalise_filament_arrays(
 # archive writer
 
 
-def _bed_shift(
-    model_xml: str,
-    src_printable_area: list[str],
-    ref_printable_area: list[str],
-) -> tuple[str, bool]:
-    """Shift build item translations so objects clear the U1 bed origin.
-
-    Bambu beds start at (0, 0); the U1 bed starts at (0.5, 1).  Models that
-    fill the source bed to its front/left edge land 1mm off the U1 plate.
-
-    For multi-plate files (build items spread > _MULTIPLATE_SPAN_MM), skip
-    the shift — each plate has its own world-space offset and a uniform
-    translation would misalign all but the first plate.
-
-    Returns (possibly-modified xml, shifted: bool).
-    """
-    transforms = re.findall(r'transform="([^"]+)"', model_xml)
-    if not transforms:
-        return model_xml, False
-
-    txs = []
-    tys = []
-    for t in transforms:
-        vals = t.split()
-        if len(vals) == 12:
-            txs.append(float(vals[9]))
-            tys.append(float(vals[10]))
-
-    if not txs:
-        return model_xml, False
-
-    if (max(txs) - min(txs)) > _MULTIPLATE_SPAN_MM or (max(tys) - min(tys)) > _MULTIPLATE_SPAN_MM:
-        return model_xml, False  # multi-plate — skip
-
-    def _parse_min(area: list[str]) -> tuple[float, float]:
-        xs, ys = [], []
-        for pt in area:
-            x, y = pt.split("x")
-            xs.append(float(x)); ys.append(float(y))
-        return min(xs), min(ys)
-
-    src_ox, src_oy = _parse_min(src_printable_area)
-    ref_ox, ref_oy = _parse_min(ref_printable_area)
-    dx = (ref_ox - src_ox) + _BED_MARGIN_MM
-    dy = (ref_oy - src_oy) + _BED_MARGIN_MM
-
-    if abs(dx) < 1e-6 and abs(dy) < 1e-6:
-        return model_xml, False
-
-    def _replace(m: re.Match) -> str:
-        vals = m.group(1).split()
-        if len(vals) != 12:
-            return m.group(0)
-        vals[9] = f"{float(vals[9]) + dx:.6g}"
-        vals[10] = f"{float(vals[10]) + dy:.6g}"
-        return f'transform="{" ".join(vals)}"'
-
-    return re.sub(r'transform="([^"]+)"', _replace, model_xml), True
-
-
 def _write_output_archive(
     *,
     source_path: Path,
@@ -861,21 +869,70 @@ def _write_output_archive(
     preserve_bambu_metadata: bool = False,
     target_printer_model: str = "Snapmaker U1",
 ) -> None:
-    new_proj_bytes = json.dumps(
-        new_project_settings, indent=4, ensure_ascii=False
-    ).encode("utf-8")
-
     # Read source bed extents for the build-item shift calculation.
     with zipfile.ZipFile(source_path, "r") as _zpa:
-        _src_area = (
-            json.loads(_zpa.read(PROJECT_SETTINGS).decode("utf-8")).get("printable_area")
-            if PROJECT_SETTINGS in _zpa.namelist() else None
-        ) or ["0x0"]
+        source_cfg = (
+            json.loads(_zpa.read(PROJECT_SETTINGS).decode("utf-8"))
+            if PROJECT_SETTINGS in _zpa.namelist() else {}
+        )
+        _src_area = source_cfg.get("printable_area") or ["0x0"]
     _ref_area = new_project_settings.get("printable_area") or ["0x0"]
 
     with zipfile.ZipFile(source_path, "r") as zin, zipfile.ZipFile(
         output_path, "w", compression=zipfile.ZIP_DEFLATED
     ) as zout:
+
+        source_model_settings = None
+        if not preserve_bambu_metadata and MODEL_SETTINGS in zin.namelist():
+            try:
+                source_model_settings = zin.read(MODEL_SETTINGS).decode("utf-8")
+            except UnicodeDecodeError as err:
+                raise MetadataRewriteError(
+                    "Cannot safely update model_settings.config; re-export the project "
+                    "from its source slicer and try again."
+                ) from err
+
+        placed_model = None
+        was_shifted = False
+        if not preserve_bambu_metadata and MODEL_3D in zin.namelist():
+            placed_model, was_shifted = _bed_shift(
+                decode_model_xml(zin.read(MODEL_3D), MODEL_3D),
+                _src_area, _ref_area, source_model_settings,
+            )
+
+        generated_model_settings = None
+        if (not preserve_bambu_metadata and MODEL_SETTINGS not in zin.namelist()
+                and "Metadata/Slic3r_PE_model.config" in zin.namelist() and placed_model is not None):
+            generated_model_settings = minimal_model_settings(zin.namelist(), source_path)
+            placed_model, generated_model_settings = import_prusa_parts(
+                placed_model,
+                decode_model_xml(zin.read("Metadata/Slic3r_PE_model.config"), "Prusa volume settings"),
+                generated_model_settings,
+            )
+
+        # Towers use per-plate local coordinates, without the grid-origin delta.
+        # Move source positions only when model placement was mapped, keeping
+        # reference defaults and explicit rules/advanced positions in target space.
+        offset = bed_offset(_src_area, _ref_area) if was_shifted else None
+        if offset is not None:
+            explicit_keys = set(settings.advanced_overrides)
+            for event in diff.build().rules_matched:
+                explicit_keys.update(event.overrides_applied)
+            for key, delta in zip(("wipe_tower_x", "wipe_tower_y"), offset):
+                old = source_cfg.get(key)
+                if key in explicit_keys or not delta or not isinstance(old, list) or not old:
+                    continue
+                try:
+                    values = [float(value) + delta for value in old]
+                except (TypeError, ValueError):
+                    continue
+                if all(math.isfinite(value) for value in values):
+                    new_project_settings[key] = [f"{value:.12g}" for value in values]
+                    diff.record_identity_swap(key, old, new_project_settings[key])
+
+        new_proj_bytes = json.dumps(
+            new_project_settings, indent=4, ensure_ascii=False
+        ).encode("utf-8")
 
         # Collect the reference's model_settings once, in case we need to
         # fall back to it (e.g. if source has none).
@@ -915,7 +972,7 @@ def _write_output_archive(
                 continue
 
             if name == MODEL_3D and not preserve_bambu_metadata:
-                model_xml = zin.read(MODEL_3D).decode("utf-8")
+                model_xml = placed_model
                 # For non-Orca sources: replace PrusaSlicer namespace with BambuStudio
                 # namespace so Orca accepts the file as a valid project rather than
                 # falling back to geometry-only mode.
@@ -943,18 +1000,21 @@ def _write_output_archive(
                         )
                     if paint_attrs:
                         log.info("STAGE  prusa-paint: %d mmu_segmentation attrs → paint_color", paint_attrs)
-                shifted_xml, was_shifted = _bed_shift(model_xml, _src_area, _ref_area)
-                zout.writestr(item, shifted_xml.encode("utf-8"))
+                model_xml = remap_paint_color(model_xml, remap, len(remap))
+                zout.writestr(item, model_xml.encode("utf-8"))
                 if was_shifted:
-                    log.info("STAGE  bed-shift: build items shifted to U1 bed origin")
+                    log.info("STAGE  bed-shift: build items mapped to target plate centres")
                 else:
-                    log.info("STAGE  bed-shift: skipped (multi-plate or no shift needed)")
+                    log.info("STAGE  bed-shift: unchanged (same bed or no known placement)")
+                continue
+
+            if name.startswith("3D/") and name.endswith(".model") and not preserve_bambu_metadata:
+                model_xml = decode_model_xml(zin.read(name), name)
+                zout.writestr(item, remap_paint_color(model_xml, remap, len(remap)))
                 continue
 
             if name == MODEL_SETTINGS and not preserve_bambu_metadata:
-                modified = _rewrite_model_settings(
-                    zin.read(MODEL_SETTINGS).decode("utf-8"), remap
-                )
+                modified = _rewrite_model_settings(source_model_settings, remap)
                 zout.writestr(name, modified)
                 continue
 
@@ -967,15 +1027,14 @@ def _write_output_archive(
                 continue
 
             if name == CUSTOM_GCODE_XML:
-                # Use pre-processed XML (with swap pauses) if available.
-                if custom_gcode_xml_override is not None:
-                    zout.writestr(name, custom_gcode_xml_override)
-                else:
-                    pause_cmd = new_project_settings.get("machine_pause_gcode", "M600")
-                    modified = rewrite_custom_gcode_per_layer(
-                        zin.read(CUSTOM_GCODE_XML).decode("utf-8"), pause_cmd
-                    )
-                    zout.writestr(name, modified)
+                # Swap planning reads source slot numbers; remap tool changes only
+                # after it has inserted the pauses for the original palette.
+                xml = custom_gcode_xml_override if custom_gcode_xml_override is not None else zin.read(name).decode("utf-8")
+                modified = rewrite_custom_gcode_per_layer(
+                    xml, new_project_settings.get("machine_pause_gcode", "M600"),
+                    remap=None if preserve_bambu_metadata else remap,
+                )
+                zout.writestr(name, modified)
                 continue
 
             # Everything else copies through verbatim.
@@ -1001,7 +1060,10 @@ def _write_output_archive(
             # Generate a minimal model_settings.config from actual object IDs in the
             # source model so Orca can load the scene without reference object confusion.
             if MODEL_SETTINGS not in src_names:
-                zout.writestr(MODEL_SETTINGS, minimal_model_settings(src_names, source_path))
+                generated = generated_model_settings or minimal_model_settings(src_names, source_path)
+                if not preserve_bambu_metadata:
+                    generated = _rewrite_model_settings(generated, remap)
+                zout.writestr(MODEL_SETTINGS, generated)
             # Orca requires slice_info.config to recognise the file as a project.
             if SLICE_INFO not in src_names:
                 zout.writestr(SLICE_INFO, minimal_slice_info(target_printer_model))
@@ -1012,73 +1074,3 @@ def _write_output_archive(
 
 def _is_slice_artifact(name: str) -> bool:
     return any(p.match(name) for p in _SLICE_ARTIFACT_PATTERNS)
-
-
-def _rewrite_model_settings(xml_text: str, remap: dict[int, int]) -> str:
-    """Rewrite per-object ``extruder`` metadata and plate ``filament_maps``.
-
-    The remap here is 0-indexed (source_slot -> target_slot). XML stores
-    extruder values as 1-indexed strings, so we translate.
-    """
-    try:
-        root = ET.fromstring(xml_text)
-    except ET.ParseError:
-        # Pass malformed XML through unchanged rather than failing the
-        # whole conversion — the user can still open the file and diagnose.
-        return xml_text
-
-    # Orca errors if objects have different raft layer counts when prime tower
-    # is enabled.  Collect all explicit raft_layers values; treat absent as
-    # "0".  If the effective set has >1 distinct value, normalise all to "0".
-    raft_metas = [m for m in root.iter("metadata") if m.get("key") == "raft_layers"]
-    effective_raft = {m.get("value", "0") for m in raft_metas}
-    if len(raft_metas) < sum(1 for _ in root.iter("object")):
-        effective_raft.add("0")  # some objects have no raft_layers → implicit 0
-    if len(effective_raft) > 1:
-        for m in raft_metas:
-            m.set("value", "0")
-
-    for meta in root.iter("metadata"):
-        key = meta.get("key")
-        if key in _VALUE_REMAP:
-            val = meta.get("value")
-            if val in _VALUE_REMAP[key]:
-                meta.set("value", _VALUE_REMAP[key][val])
-        if meta.get("key") == "extruder":
-            raw = meta.get("value")
-            if raw is None:
-                continue
-            try:
-                old_1based = int(raw)
-            except ValueError:
-                continue
-            old_0based = old_1based - 1
-            if old_0based in remap:
-                new_0based = remap[old_0based]
-                if new_0based < 0:
-                    # Filament was dropped — clamp to toolhead 1.
-                    new_1based = 1
-                else:
-                    new_1based = new_0based + 1
-                meta.set("value", str(new_1based))
-        elif meta.get("key") == "filament_maps":
-            # Set every slot to its own toolhead index (1-indexed), clipped
-            # to the U1 toolhead count. This matches the identity remap and
-            # distributes Bambu's all-on-extruder-1 default across U1's
-            # four heads.
-            raw = meta.get("value", "")
-            slots = raw.split()
-            new_slots: list[str] = []
-            for i in range(len(slots)):
-                # filament_maps is per-object toolhead routing for non-painted
-                # models. For painted models the paint_color mesh attributes
-                # drive colour output at re-slice time, making these values
-                # largely irrelevant — Orca re-derives them on re-slice.
-                # The remap dict is intentionally NOT applied here: for
-                # non-painted identity remaps this formula is correct for
-                # slots 0-3, and for painted models it doesn't matter.
-                toolhead = (i % _U1_TOOLHEADS_DEFAULT) + 1
-                new_slots.append(str(toolhead))
-            meta.set("value", " ".join(new_slots) if new_slots else raw)
-
-    return ET.tostring(root, encoding="unicode", xml_declaration=False)

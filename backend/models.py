@@ -94,6 +94,9 @@ class DiffReport(BaseModel):
     source_filename: str
     output_filename: str
     reference_profile: str
+    output_printer: str | None = None
+    source_nozzle_diameters: list[float] = Field(default_factory=list)
+    output_nozzle_diameters: list[float] = Field(default_factory=list)
 
     identity_swaps: list[IdentitySwap] = Field(default_factory=list)
     gcode_swaps: list[GcodeSwapEvent] = Field(default_factory=list)
@@ -161,3 +164,4 @@ class ProfileDescriptor(BaseModel):
     source: str  # "bundled" or "user"
     layer_height: str | None = None
     printer_variant: str | None = None
+    nozzle_diameters: list[float] = Field(default_factory=list)

@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { DiffPayload } from './api';
   import { downloadUrl } from './api';
+  import NozzleWarning from './NozzleWarning.svelte';
 
   interface Props {
     diff: DiffPayload;
@@ -8,9 +9,10 @@
     downloadName: string;
     onreset: () => void;
     ondownload?: () => void;
+    showNozzleWarning?: boolean;
   }
 
-  let { diff, jobId, downloadName, onreset, ondownload }: Props = $props();
+  let { diff, jobId, downloadName, onreset, ondownload, showNozzleWarning = false }: Props = $props();
 
   let expanded = $state<Set<number>>(new Set());
 
@@ -43,17 +45,29 @@
         {diff.report.source_filename} →
         <strong class="accent">{diff.report.output_filename}</strong>
       </div>
+      {#if diff.report.output_printer}
+        <div class="meta muted">Printer: <strong>{diff.report.output_printer}</strong></div>
+      {/if}
     </div>
-    <div class="header-actions">
-      <button class="ghost" onclick={onreset}>Convert another</button>
-      <a
-        href={downloadUrl(jobId)}
-        download={downloadName}
-        class="download-btn"
-        onclick={ondownload}
-      >
-        Download .3mf
-      </a>
+    <div class="header-download">
+      {#if showNozzleWarning}
+        <NozzleWarning
+          source={diff.report.source_nozzle_diameters ?? []}
+          target={diff.report.output_nozzle_diameters ?? []}
+          completed
+        />
+      {/if}
+      <div class="header-actions">
+        <button class="ghost" onclick={onreset}>Convert another</button>
+        <a
+          href={downloadUrl(jobId)}
+          download={downloadName}
+          class="download-btn"
+          onclick={ondownload}
+        >
+          Download .3mf
+        </a>
+      </div>
     </div>
   </div>
 
@@ -283,6 +297,7 @@
   }
   .header h2 { margin: 0 0 6px; font-size: 18px; }
   .header-left { flex: 1; }
+  .header-download { display: flex; flex-direction: column; gap: 10px; max-width: 440px; }
   .header-actions { display: flex; gap: 10px; align-items: center; flex-shrink: 0; }
   .accent { color: var(--accent); }
   .meta { font-size: 13px; }

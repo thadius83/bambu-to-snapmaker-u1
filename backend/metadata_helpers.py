@@ -96,8 +96,10 @@ def rewrite_slice_info(xml_text: str, printer_model: str = "Snapmaker U1") -> st
     return ET.tostring(root, encoding="unicode", xml_declaration=False)
 
 
-def rewrite_custom_gcode_per_layer(xml_text: str, pause_gcode: str) -> str:
-    """Rewrite per-layer pause commands to use U1-compatible G-code."""
+def rewrite_custom_gcode_per_layer(
+    xml_text: str, pause_gcode: str, remap: dict[int, int] | None = None,
+) -> str:
+    """Rewrite pauses and optional tool-change slots after swap planning."""
     try:
         root = ET.fromstring(xml_text)
     except ET.ParseError:
@@ -106,6 +108,13 @@ def rewrite_custom_gcode_per_layer(xml_text: str, pause_gcode: str) -> str:
     for layer in root.iter("layer"):
         if layer.get("type") == "1":
             layer.set("gcode", pause_gcode)
+        elif layer.get("type") == "2" and remap:
+            try:
+                slot = int(layer.get("extruder", "0"))
+            except ValueError:
+                continue
+            if slot > 0 and slot - 1 in remap:
+                layer.set("extruder", str(max(remap[slot - 1], 0) + 1))
     return '<?xml version="1.0" encoding="utf-8"?>\n' + ET.tostring(root, encoding="unicode")
 
 
