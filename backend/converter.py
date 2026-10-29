@@ -247,6 +247,8 @@ def convert(
             "single_extruder_multi_material",
             "ooze_prevention",
             "standby_temperature_delta",
+            "preheat_time",
+            "preheat_steps",
         ):
             if key in reference_cfg:
                 old = merged.get(key)

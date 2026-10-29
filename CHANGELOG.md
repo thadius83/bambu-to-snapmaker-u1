@@ -5,7 +5,9 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] - 2026-10-29
+## [Unreleased]
+
+Last updated: 2026-10-29
 
 ### Added
 
@@ -41,6 +43,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   shown in the UI.
 - Apply the selected U1 profile's standby cooling settings so parked toolheads
   cool between uses.
+- Apply the selected U1 profile's advance preheat settings so parked toolheads
+  begin reheating before reuse.
 - Keep filament temperatures and fan settings aligned when remapping slots.
 - Normalize Bambu filament settings stored per extruder variant for U1
   toolheads, preserving the correct settings for each filament.
