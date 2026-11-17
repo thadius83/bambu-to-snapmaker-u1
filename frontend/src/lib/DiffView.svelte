@@ -99,7 +99,7 @@
       <span class="pill">⇆ {counts.slot_remaps} filament slots</span>
     {/if}
     {#if counts.slice_artifacts_stripped}
-      <span class="pill">✕ {counts.slice_artifacts_stripped} caches stripped</span>
+      <span class="pill">✕ {counts.slice_artifacts_stripped} files removed</span>
     {/if}
     {#if counts.advanced_overrides_applied}
       <span class="pill accent">+ {counts.advanced_overrides_applied} overrides</span>
@@ -223,7 +223,7 @@
                   </tbody>
                 </table>
 
-              {:else if section.title === 'Slice caches stripped'}
+              {:else if section.title === 'Archive cleanup'}
                 <div class="chip-list">
                   {#each section.details as name}
                     <span class="chip mono">{name}</span>

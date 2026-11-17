@@ -173,10 +173,10 @@ def summarise(report: DiffReport) -> list[dict[str, Any]]:
     if report.slice_artifacts_stripped:
         sections.append(
             {
-                "title": "Slice caches stripped",
+                "title": "Archive cleanup",
                 "summary": (
-                    f"{len(report.slice_artifacts_stripped)} stale "
-                    "plate_*.gcode / plate_*.json files removed"
+                    f"{len(report.slice_artifacts_stripped)} "
+                    f"file{'s' if len(report.slice_artifacts_stripped) != 1 else ''} removed"
                 ),
                 "details": list(report.slice_artifacts_stripped),
             }

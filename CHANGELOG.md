@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-Last updated: 2026-10-29
+Last updated: 2026-11-17
 
 ### Added
 
@@ -43,6 +43,9 @@ Last updated: 2026-10-29
 
 ### Fixed
 
+- Remove clearly unreferenced foreign printer presets; retain uncertain entries and
+  list removed files under Archive cleanup. Stream retained archive entries.
+- Use the target printer's process compatibility list instead of retaining Bambu printers.
 - Use the U1 profile's cutter-retraction settings; invalid source filament
   cutter overrides inherit the printer setting.
 - Use target machine jerk limits and clamp enabled process jerk when speed
