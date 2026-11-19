@@ -17,6 +17,9 @@ except ImportError:
 _IDENTITY_FIELDS = frozenset({"printer_settings_id", "printer_model", "name", "inherits"})
 _VECTOR_REFERENCES = ("inherits_group", "compatible_printers", "print_compatible_printers")
 _SURROGATE_ESCAPE = re.compile(rb"\\u[dD][89a-fA-F][0-9a-fA-F]{2}")
+_BAMBU_STOCK_PARENT = re.compile(
+    r"(Bambu Lab (?:X1 Carbon|X1|X1E|P1P|P1S|A1 mini|A1|H2D|H2S)) 0\.[2468] nozzle"
+)
 
 
 class _CheckedStream:
@@ -85,6 +88,30 @@ def foreign_machine_presets_to_strip(
         return set()
 
 
+def _inherited_model(config: dict[str, str], by_alias: dict[str, dict[str, str]],
+                     cache: dict[str, str]) -> str:
+    seen: set[str] = set()
+    while True:
+        identity = config['printer_settings_id']
+        if identity in cache or identity in seen:
+            model = cache.get(identity, '')
+            break
+        seen.add(identity)
+        model = config.get("printer_model", "").strip().casefold()
+        if model:
+            break
+        parent = config.get("inherits", "")
+        if parent in by_alias:
+            config = by_alias[parent]
+            continue
+        # Only an exact stock parent identifies hardware. Display names do not.
+        match = _BAMBU_STOCK_PARENT.fullmatch(parent)
+        model = match.group(1).casefold() if match else ""
+        break
+    cache.update(dict.fromkeys(seen, model))
+    return model
+
+
 def _find_foreign_presets(
     archive: zipfile.ZipFile, project_settings: dict[str, Any],
 ) -> set[str]:
@@ -110,7 +137,8 @@ def _find_foreign_presets(
             return set()
         protected.update(values)
 
-    presets: list[tuple[str, str, set[str]]] = []
+    presets: list[tuple[str, dict[str, str], set[str]]] = []
+    by_alias: dict[str, dict[str, str]] = {}
     seen_names: set[str] = set()
     seen_aliases: set[str] = set()
     for item in archive.infolist():
@@ -137,13 +165,18 @@ def _find_foreign_presets(
         if not aliases.isdisjoint(seen_aliases):
             return set()
         seen_aliases.update(aliases)
-        model = config.get("printer_model", "").strip().casefold()
         protected.add(config.get("inherits", ""))
+        by_alias.update(dict.fromkeys(aliases, config))
+        presets.append((name, config, aliases))
+
+    cache: dict[str, str] = {}
+    resolved = [(name, _inherited_model(config, by_alias, cache), aliases)
+                for name, config, aliases in presets]
+    for _, model, aliases in resolved:
         if not model or model == target_model:
             protected.update(aliases)
-        presets.append((name, model, aliases))
 
     return {
-        name for name, model, aliases in presets
+        name for name, model, aliases in resolved
         if model and model != target_model and aliases.isdisjoint(protected)
     }

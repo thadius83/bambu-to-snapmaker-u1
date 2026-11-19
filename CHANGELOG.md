@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-Last updated: 2026-11-17
+Last updated: 2026-11-19
 
 ### Added
 
@@ -42,6 +42,9 @@ Last updated: 2026-11-17
 - Use an optimized 1200 × 630 JPEG for the social preview.
 
 ### Fixed
+
+- Remove unused embedded Bambu printer presets whose model is identified by
+  their parent preset, while preserving unknown or referenced presets.
 
 - Remove clearly unreferenced foreign printer presets; retain uncertain entries and
   list removed files under Archive cleanup. Stream retained archive entries.
